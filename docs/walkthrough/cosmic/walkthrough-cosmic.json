@@ -122,11 +122,11 @@
       "name": "confirm",
       "png": "docs/screenshots/04-confirm.png",
       "rendered": true,
-      "colours": 306,
+      "colours": 307,
       "flat": 0.5778954910691437,
-      "ink": 0.9908004503812887,
-      "stddev": 0.07439668604234888,
-      "text_excerpt": "Confirm installation The last screen before anything is written. Everything on /dev/sda will be erased. This cannot be undone.  Summary Target disk /dev/sda Filesystem xfs Encryption No encryption Computer name ubuntu Image ghcr.io/tuna-os/"
+      "ink": 0.9908900148421107,
+      "stddev": 0.07411911963432745,
+      "text_excerpt": "Confirm installation The last screen before anything is written. Everything on /dev/sda will be erased. This cannot be undone.  Summary Target disk /dev/sda Filesystem xfs Encryption No encryption Computer name ubuntu Image ghcr.io/example/"
     },
     {
       "name": "installing",
@@ -163,7 +163,7 @@
     389212,
     250664,
     240645,
-    177539,
+    177378,
     347534,
     24670
   ],
