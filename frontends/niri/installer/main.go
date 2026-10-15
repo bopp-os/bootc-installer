@@ -2,13 +2,16 @@
 //
 // A plain argv/stdout CLI, not a service: the QML frontend runs it with
 // Quickshell's Process for each operation (`discover-disks`, `detect`,
-// `install <recipe>`, `readiness [page]`) and parses what comes back on
-// stdout. This backend wraps fisherman; the disk list, TPM and requirements
-// are fisherman's own (`fisherman probe --json`, probe.go).
+// `install`, `validate`, `readiness [page]`) and parses what comes back on
+// stdout. This backend wraps fisherman; the disk list, TPM, requirements,
+// live media and offline images are fisherman's own (`fisherman probe
+// --json`, probe.go), and so are the recipe rules (`fisherman validate
+// --json`, validate.go).
 
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -30,7 +33,8 @@ type Recipe struct {
 	Bootloader       string   `json:"bootloader,omitempty"`
 	ComposeFsBackend bool     `json:"composeFsBackend,omitempty"`
 	Flatpaks         []string `json:"flatpaks,omitempty"`
-	// AdditionalImageStores lists embedded OCI stores for offline installs.
+	// AdditionalImageStores lists offline OCI stores. Left out, fisherman
+	// exposes the stores it finds on the host; this backend never fills it.
 	AdditionalImageStores []string `json:"additionalImageStores,omitempty"`
 	DistroID              string   `json:"distroID"`
 	SelinuxDisabled       bool     `json:"selinuxDisabled"`
@@ -48,8 +52,9 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Usage: tuna-installer-niri <command> [args...]")
 		fmt.Fprintln(os.Stderr, "Commands:")
 		fmt.Fprintln(os.Stderr, "  discover-disks     List the disks fisherman offers as JSON")
-		fmt.Fprintln(os.Stderr, "  detect             Report live-ISO image, offline stores, TPM and requirements as JSON")
-		fmt.Fprintln(os.Stderr, "  install <recipe>   Run fisherman with the given recipe JSON")
+		fmt.Fprintln(os.Stderr, "  detect             Report live media, offline images, TPM, requirements and encryption choices as JSON")
+		fmt.Fprintln(os.Stderr, "  install            Run fisherman with the recipe JSON read from stdin")
+		fmt.Fprintln(os.Stderr, "  validate           Check a partial recipe from stdin with fisherman validate --json --partial")
 		fmt.Fprintln(os.Stderr, "  readiness [page]   Record that the UI window presented a frame")
 		fmt.Fprintln(os.Stderr, "  reboot             Restart the host (the done page's action)")
 		os.Exit(1)
@@ -71,6 +76,9 @@ func main() {
 			os.Exit(1)
 		}
 		runInstall(string(recipeJSON))
+	case "validate":
+		// A page's fields as a partial recipe, on stdin for the same reason.
+		validateMain()
 	case "reboot":
 		// The done page's Restart. On the host through flatpak-spawn when
 		// sandboxed, like every other frontend's reboot path.
@@ -109,19 +117,24 @@ func discoverDisks() {
 	}
 }
 
-// detectEnvironment reports offline-install facts for the QML frontend.
+// detectEnvironment reports the environment facts for the QML frontend.
 func detectEnvironment() {
-	stores := offlineStores()
-	// TPM and requirements are fisherman's. A failed probe offers no TPM
-	// choices and warns about nothing; discover-disks reports the failure.
+	// Every fact is fisherman's. A failed probe offers no TPM choices,
+	// warns about nothing and is not live media; discover-disks reports the
+	// failure.
 	facts, err := runProbe()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
+		facts = ProbeFacts{OfflineImages: []string{}}
 	}
 	result := map[string]any{
-		"liveImage":     liveISOImage(),
-		"offlineStores": stores,
-		"offlineImages": offlineImages(stores),
+		// probe's live.is_live: only then may the recipe leave `image`
+		// empty, which installs the running system.
+		"isLive": facts.IsLive,
+		// The booted image on live media, for display; "" otherwise.
+		"liveImage": facts.LiveImage,
+		// Image refs in the host's offline stores (offline.images).
+		"offlineImages": facts.OfflineImages,
 		// fisherman's tpm.usable. The UI hides the TPM encryption options
 		// when this is false, rather than offering a choice that would fail
 		// later at install time.
@@ -129,6 +142,9 @@ func detectEnvironment() {
 		// fisherman's system.unmet ("ram", "cpu", "uefi"): the welcome page
 		// warns about each one.
 		"unmet": unmetOrEmpty(facts, err),
+		// The encryption types in display order, with needs_passphrase and
+		// needs_tpm2: fisherman's data/encryption-choices.json, embedded.
+		"encryptionChoices": encryptionChoices(),
 		// Product identity per shared/branding/README.md: branding.json,
 		// then os-release, then neutral. The QML takes its product name,
 		// hostname seed, distroID and default image from here; nothing in
@@ -183,36 +199,25 @@ func runInstall(recipeJSON string) {
 		os.Exit(1)
 	}
 
-	// Offline install support (spec §4): live-ISO mode allows an empty image;
-	// embedded stores are always passed — fisherman ignores unhelpful ones.
-	if recipe.Image == "" && liveISOImage() == "" {
-		fmt.Fprintln(os.Stderr, "invalid recipe: image is required outside live-ISO mode")
-		os.Exit(1)
-	}
-	if len(recipe.AdditionalImageStores) == 0 {
-		recipe.AdditionalImageStores = offlineStores()
-	}
+	// An empty image (install the running system) and the offline stores
+	// are fisherman's to judge and find (tuna-os/fisherman#276): it rejects
+	// an empty image off live media before touching a disk, and exposes the
+	// host's stores when additionalImageStores is absent.
 	if recipe.DistroID == "" {
 		recipe.DistroID = resolveBranding().ID
 	}
 
-	data, err := json.MarshalIndent(recipe, "", "  ")
+	data, err := json.Marshal(recipe)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "encode recipe: %v\n", err)
 		os.Exit(1)
 	}
-	// 0600 under XDG_RUNTIME_DIR — the recipe may hold a passphrase.
-	recipePath, err := writeRecipe(data)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "write recipe: %v\n", err)
-		os.Exit(1)
-	}
-	defer os.RemoveAll(recipeDir(recipePath))
 
-	// flatpak-spawn --host bash -c 'pkexec /usr/local/bin/fisherman "$1"' in
-	// Flatpak, sudo /usr/local/bin/fisherman otherwise.
-	argv := append(fishermanCommand(), recipePath)
-	cmd := wrapperCommand(argv)
+	// flatpak-spawn --host bash -c 'pkexec /usr/local/bin/fisherman -' in
+	// Flatpak, sudo /usr/local/bin/fisherman - otherwise. The recipe goes on
+	// the wrapper's stdin, which closes at EOF: no file holds it.
+	cmd := wrapperCommand(fishermanCommand())
+	cmd.Stdin = bytes.NewReader(data)
 
 	// Tee fisherman's output to a persistent log in addition to the pipe
 	// Quickshell reads (root.installLog in installer.qml) — that property is
@@ -224,7 +229,7 @@ func runInstall(recipeJSON string) {
 		cmd.Stderr = os.Stderr
 	} else {
 		defer logFile.Close()
-		fmt.Fprintf(logFile, "=== install started, recipe=%s ===\n", recipePath)
+		fmt.Fprintln(logFile, "=== install started, recipe on stdin ===")
 		cmd.Stdout = io.MultiWriter(os.Stdout, logFile)
 		cmd.Stderr = io.MultiWriter(os.Stderr, logFile)
 	}

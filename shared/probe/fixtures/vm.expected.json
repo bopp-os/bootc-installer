@@ -14,5 +14,7 @@
     "ram",
     "cpu",
     "uefi"
-  ]
+  ],
+  "live_image": "ghcr.io/example/os:stable",
+  "offline_images": []
 }

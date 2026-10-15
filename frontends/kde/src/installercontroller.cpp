@@ -12,7 +12,6 @@
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QStandardPaths>
-#include <QTemporaryDir>
 
 InstallerController::InstallerController(QObject *parent)
     : QObject(parent)
@@ -25,12 +24,100 @@ InstallerController::InstallerController(QObject *parent)
     const probe::Result facts = probe::run();
     m_hasTpm = facts.tpmUsable;
     m_unmet = facts.unmet;
+    // Live media is fisherman's answer (probe's `live`). This used to be a
+    // `bootc status` of our own plus /run/ostree-live and /proc/cmdline,
+    // read inside the Flatpak sandbox.
+    m_recipe.liveMode = facts.isLive;
+    m_liveImage = facts.liveImage;
     // Product identity per shared/branding/README.md: branding.json, then
     // os-release, then neutral. Nothing in this frontend names a product.
     m_branding = branding::resolve();
     m_productName = m_branding.name;
     m_recipe.distroID = m_branding.id;
     m_recipe.hostname = m_branding.defaultHostname;
+
+    // One check at a time, after a pause in the changes.
+    m_validateTimer.setSingleShot(true);
+    m_validateTimer.setInterval(300);
+    connect(&m_validateTimer, &QTimer::timeout, this, &InstallerController::runValidate);
+    checkFields();
+}
+
+QByteArray InstallerController::partialRecipe() const
+{
+    QJsonObject enc{{QStringLiteral("type"), m_recipe.encryption.type}};
+    if (Recipe::needsPassphrase(m_recipe.encryption.type))
+        enc[QStringLiteral("passphrase")] = m_recipe.encryption.passphrase;
+    const QJsonObject partial{
+        {QStringLiteral("hostname"), m_recipe.hostname},
+        {QStringLiteral("filesystem"), m_recipe.filesystem},
+        {QStringLiteral("btrfsSubvolumes"), m_recipe.btrfsSubvolumes},
+        {QStringLiteral("encryption"), enc},
+    };
+    return QJsonDocument(partial).toJson(QJsonDocument::Compact);
+}
+
+void InstallerController::checkFields()
+{
+    m_validateTimer.start();
+}
+
+void InstallerController::runValidate()
+{
+#if QT_CONFIG(process)
+    if (m_validateProcess) {
+        m_validateAgain = true;
+        return;
+    }
+    QStringList argv = validate::command(offline::inFlatpak());
+    m_validateProcess = new QProcess(this);
+    m_validateProcess->setProgram(argv.takeFirst());
+    m_validateProcess->setArguments(argv);
+    connect(m_validateProcess, &QProcess::finished, this, [this](int code, QProcess::ExitStatus status) {
+        // 0 valid, 1 invalid; anything else means no answer.
+        if (status == QProcess::NormalExit && (code == 0 || code == 1))
+            applyValidateAnswer(m_validateProcess->readAllStandardOutput());
+        else
+            qCWarning(logInstaller) << "fisherman validate could not run, exit" << code;
+        m_validateProcess->deleteLater();
+        m_validateProcess = nullptr;
+        if (m_validateAgain) {
+            m_validateAgain = false;
+            checkFields();
+        }
+    });
+    connect(m_validateProcess, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
+        if (error != QProcess::FailedToStart)
+            return;
+        qCWarning(logInstaller) << "fisherman validate could not start:" << m_validateProcess->errorString();
+        m_validateProcess->deleteLater();
+        m_validateProcess = nullptr;
+    });
+    m_validateProcess->start();
+    // The partial recipe on stdin, never argv: the passphrase is in it.
+    m_validateProcess->write(partialRecipe());
+    m_validateProcess->closeWriteChannel();
+#endif
+}
+
+void InstallerController::applyValidateAnswer(const QByteArray &stdoutData)
+{
+    const validate::Result answer = validate::parse(stdoutData);
+    if (!answer.ok)
+        qCWarning(logInstaller) << "fisherman validate:" << answer.error;
+    m_problems = answer.ok ? answer.problems : QList<validate::Problem>{};
+    Q_EMIT problemsChanged();
+}
+
+QString InstallerController::problemText(const QString &fieldPrefix) const
+{
+    for (const validate::Problem &p : m_problems) {
+        if (p.field != fieldPrefix && !p.field.startsWith(fieldPrefix + QLatin1Char('.')))
+            continue;
+        const QString line = p.code.isEmpty() ? QString() : text(validate::copyKey(p));
+        return line.isEmpty() ? p.message : line;
+    }
+    return {};
 }
 
 QString InstallerController::requirementsWarning() const
@@ -67,6 +154,7 @@ void InstallerController::setFilesystem(const QString &v)
         return;
     m_recipe.filesystem = v;
     Q_EMIT recipeChanged();
+    checkFields();
 }
 
 void InstallerController::setBtrfsSubvolumes(bool v)
@@ -82,11 +170,12 @@ void InstallerController::setEncryptionType(const QString &v)
     if (m_recipe.encryption.type == v)
         return;
     m_recipe.encryption.type = v;
-    // A type that takes no passphrase must not keep one lying around in the
-    // recipe file.
-    if (!v.endsWith(QLatin1String("passphrase")))
+    // A type that takes no passphrase (needs_passphrase in
+    // encryption-choices.json) must not keep one lying around in the recipe.
+    if (!Recipe::needsPassphrase(v))
         m_recipe.encryption.passphrase.clear();
     Q_EMIT recipeChanged();
+    checkFields();
 }
 
 void InstallerController::setPassphrase(const QString &v)
@@ -95,6 +184,7 @@ void InstallerController::setPassphrase(const QString &v)
         return;
     m_recipe.encryption.passphrase = v;
     Q_EMIT recipeChanged();
+    checkFields();
 }
 
 void InstallerController::setHostname(const QString &v)
@@ -103,6 +193,7 @@ void InstallerController::setHostname(const QString &v)
         return;
     m_recipe.hostname = v;
     Q_EMIT recipeChanged();
+    checkFields();
 }
 
 void InstallerController::setImage(const QString &v)
@@ -490,17 +581,12 @@ void InstallerController::startInstall()
     if (m_process)
         return;
 
-    // Offline install support (INSTALLER-FRONTENDS.md §4): live-ISO mode allows
-    // an empty image; embedded stores are always passed — fisherman ignores
-    // unhelpful ones.
-    if (m_recipe.image.isEmpty() && !offline::liveIsoImage().isEmpty())
-        m_recipe.liveMode = true;
-    // Not a live ISO and nothing chosen: the branding's default image. Empty
-    // stays empty and validation reports "No OS image specified".
+    // Not live media and nothing chosen: the branding's default image. On
+    // live media the image stays empty and fisherman installs the running
+    // system; it rejects an empty image anywhere else (image_required). No
+    // additionalImageStores: fisherman exposes the host's offline stores.
     if (m_recipe.image.isEmpty() && !m_recipe.liveMode)
         m_recipe.image = m_branding.defaultImage;
-    if (m_recipe.additionalImageStores.isEmpty())
-        m_recipe.additionalImageStores = offline::offlineStores();
 
     m_log.clear();
     m_stdoutBuffer.clear();
@@ -513,54 +599,21 @@ void InstallerController::startInstall()
     resetProgress();
     appendLine(QStringLiteral("Starting installation..."));
 
-    // The recipe can hold a LUKS passphrase — write it 0600 in a fresh
-    // 0700 private directory, never a fixed world-writable temp path.
-    //
-    // This used to be `<base>/tuna-installer/recipe.json` where base is
-    // XDG_RUNTIME_DIR or /tmp (when unset — the default under sudo, whose
-    // env_reset strips it). QDir::mkpath with a fixed name in a
-    // world-writable directory:
-    //   * follows a pre-existing attacker symlink when the file is opened
-    //     with WriteOnly|Truncate,
-    //   * creates the file 0644 (umask) and only THEN chmods it 0600, so
-    //     the passphrase is briefly world-readable,
-    //   * accepts a pre-created 0777 directory as-is (mode applied only on
-    //     creation), giving a local user ownership of the path that is
-    //     handed to root via sudo/pkexec fisherman.
-    // QTemporaryDir is the mkdtemp analogue: unpredictable 0700 directory
-    // with O_EXCL semantics, so none of those races exist. It is a member so
-    // the directory survives until fisherman exits — a local QTemporaryDir
-    // would auto-remove the recipe file the moment startInstall returns.
-    if (!m_recipeDir.isValid())
-        m_recipeDir = QTemporaryDir();
-    if (!m_recipeDir.isValid()) {
-        fail(QStringLiteral("Failed to create private recipe directory"));
-        return;
-    }
-    m_recipePath = m_recipeDir.filePath(QStringLiteral("recipe.json"));
-    QFile f(m_recipePath);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        fail(QStringLiteral("Failed to write recipe file"));
-        return;
-    }
-    // Inside a 0700 dir the file needs no extra hardening, but keep 0600
-    // explicit so the mode survives being copied/moved elsewhere.
-    f.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-    f.write(QJsonDocument(m_recipe.toJson()).toJson(QJsonDocument::Indented));
-    f.close();
+    // The recipe can hold a LUKS passphrase. It goes to fisherman's stdin
+    // (`fisherman -`, tuna-os/fisherman#276) and never to a file: this used
+    // to be a 0600 file in a QTemporaryDir, handed to root by path.
+    const QByteArray recipeJson = QJsonDocument(m_recipe.toJson()).toJson(QJsonDocument::Compact);
 
 #if !QT_CONFIG(process)
     // Qt for WebAssembly: there is no process to start. Only the browser
     // harness builds this, and nothing there presses Install; if something
     // ever does, it gets the ordinary failure path rather than a silent hang.
-    // The recipe may hold secrets, so it goes as it would after fisherman.
-    QFile::remove(m_recipePath);
+    Q_UNUSED(recipeJson);
     fail(QStringLiteral("This build cannot start fisherman"));
 #else
-    // flatpak-spawn --host bash -c 'pkexec /usr/local/bin/fisherman "$1"' in
-    // Flatpak, sudo /usr/local/bin/fisherman otherwise.
+    // flatpak-spawn --host bash -c 'pkexec /usr/local/bin/fisherman -' in
+    // Flatpak, sudo /usr/local/bin/fisherman - otherwise.
     QStringList cmd = offline::fishermanCommand();
-    cmd << m_recipePath;
 
     m_process = new QProcess(this);
     m_process->setProgram(cmd.takeFirst());
@@ -599,9 +652,6 @@ void InstallerController::startInstall()
     connect(m_process, &QProcess::finished, this,
             [this](int exitCode, QProcess::ExitStatus status) {
         flushStreams();
-        // The recipe may hold secrets — remove it as soon as fisherman is done.
-        if (!m_recipePath.isEmpty())
-            QFile::remove(m_recipePath);
 
         if (status == QProcess::CrashExit) {
             qCWarning(logInstaller) << "fisherman crashed";
@@ -626,6 +676,10 @@ void InstallerController::startInstall()
     });
 
     m_process->start();
+    // Buffered until the process starts, then written; closing the channel
+    // is the EOF fisherman reads to.
+    m_process->write(recipeJson);
+    m_process->closeWriteChannel();
     Q_EMIT installingChanged();
 #endif
 }

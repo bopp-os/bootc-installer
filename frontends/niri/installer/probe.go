@@ -50,6 +50,15 @@ type ProbeFacts struct {
 	Disks     []ProbeDisk
 	TPMUsable bool
 	Unmet     []string // "ram", "cpu", "uefi"
+	// IsLive: the host booted from live media (live.is_live). Only then may
+	// the recipe leave `image` empty, which installs the running system.
+	IsLive bool
+	// LiveImage is the booted image when live (live.live_image), else "".
+	LiveImage string
+	// OfflineImages are the image refs in the host's offline stores
+	// (offline.images). The stores themselves are fisherman's: a recipe that
+	// leaves additionalImageStores out gets them.
+	OfflineImages []string
 }
 
 // parseProbe reads probe output.
@@ -70,6 +79,13 @@ func parseProbe(data []byte) (ProbeFacts, error) {
 		System struct {
 			Unmet []string `json:"unmet"`
 		} `json:"system"`
+		Live struct {
+			IsLive    bool   `json:"is_live"`
+			LiveImage string `json:"live_image"`
+		} `json:"live"`
+		Offline struct {
+			Images []string `json:"images"`
+		} `json:"offline"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return ProbeFacts{}, fmt.Errorf("fisherman probe printed invalid JSON: %w", err)
@@ -81,7 +97,14 @@ func parseProbe(data []byte) (ProbeFacts, error) {
 		}
 		return ProbeFacts{}, fmt.Errorf("fisherman probe protocol_version %s is not %d", v, probeProtocolVersion)
 	}
-	facts := ProbeFacts{Disks: []ProbeDisk{}, TPMUsable: raw.TPM.Usable, Unmet: []string{}}
+	facts := ProbeFacts{Disks: []ProbeDisk{}, TPMUsable: raw.TPM.Usable, Unmet: []string{},
+		IsLive: raw.Live.IsLive, OfflineImages: []string{}}
+	if raw.Live.IsLive {
+		facts.LiveImage = raw.Live.LiveImage
+	}
+	if raw.Offline.Images != nil {
+		facts.OfflineImages = raw.Offline.Images
+	}
 	for _, d := range raw.Disks {
 		// A missing flag or an unknown excluded_reason means "not eligible".
 		if d.Eligible == nil || !*d.Eligible {

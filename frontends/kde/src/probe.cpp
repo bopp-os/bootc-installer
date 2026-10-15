@@ -61,6 +61,13 @@ Result parse(const QByteArray &json)
     const QJsonArray unmet = root.value(QLatin1String("system")).toObject().value(QLatin1String("unmet")).toArray();
     for (const QJsonValue &item : unmet)
         r.unmet.append(item.toString());
+    const QJsonObject live = root.value(QLatin1String("live")).toObject();
+    r.isLive = live.value(QLatin1String("is_live")).toBool();
+    if (r.isLive)
+        r.liveImage = live.value(QLatin1String("live_image")).toString();
+    const QJsonArray images = root.value(QLatin1String("offline")).toObject().value(QLatin1String("images")).toArray();
+    for (const QJsonValue &item : images)
+        r.offlineImages.append(item.toString());
     return r;
 }
 

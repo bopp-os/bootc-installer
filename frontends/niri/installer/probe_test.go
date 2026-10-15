@@ -27,9 +27,11 @@ func TestProbeFixturesRenderLikeEveryFrontend(t *testing.T) {
 				t.Fatal(err)
 			}
 			var want struct {
-				Disks     []ProbeDisk `json:"disks"`
-				TPMUsable bool        `json:"tpm_usable"`
-				Unmet     []string    `json:"unmet"`
+				Disks         []ProbeDisk `json:"disks"`
+				TPMUsable     bool        `json:"tpm_usable"`
+				Unmet         []string    `json:"unmet"`
+				LiveImage     string      `json:"live_image"`
+				OfflineImages []string    `json:"offline_images"`
 			}
 			if err := json.Unmarshal(raw, &want); err != nil {
 				t.Fatal(err)
@@ -49,6 +51,12 @@ func TestProbeFixturesRenderLikeEveryFrontend(t *testing.T) {
 			}
 			if !reflect.DeepEqual(facts.Unmet, want.Unmet) {
 				t.Errorf("unmet = %v, want %v", facts.Unmet, want.Unmet)
+			}
+			if facts.LiveImage != want.LiveImage {
+				t.Errorf("live image = %q, want %q", facts.LiveImage, want.LiveImage)
+			}
+			if !reflect.DeepEqual(facts.OfflineImages, want.OfflineImages) {
+				t.Errorf("offline images = %v, want %v", facts.OfflineImages, want.OfflineImages)
 			}
 		})
 	}

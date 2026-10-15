@@ -18,6 +18,7 @@ import re
 from gettext import gettext as _
 
 from bootc_installer.utils import copy as copy_text
+from bootc_installer.utils.field_check import FieldCheck
 
 from gi.repository import Adw, GObject, Gtk
 
@@ -68,9 +69,11 @@ class BootcConfirm(Adw.Bin):
         self.__window = window
         self.delta = False
         self._hostname_entry_row = None
+        self._hostname_check = None
 
     def update(self, finals):
         self._hostname_entry_row = None  # reset on every update
+        self._hostname_check = None
         try:
             for widget in self.active_widgets:
                 self.group_changes.remove(widget)
@@ -172,6 +175,18 @@ class BootcConfirm(Adw.Bin):
                     entry_row.set_show_apply_button(False)
                     self._hostname_entry_row = entry_row
                     self.active_widgets.append(entry_row)
+                    # An edit here is the hostname that gets installed, so
+                    # fisherman checks it as the disk page's field is.
+                    # A row of its own, under the entry, like the summary.
+                    message = Adw.ActionRow()
+                    message.set_use_markup(False)
+                    message.set_title_lines(0)
+                    message.add_css_class("error")
+                    self.active_widgets.append(message)
+                    self._hostname_check = FieldCheck(
+                        self.__window, entry_row, "hostname",
+                        lambda text: {"hostname": text.strip()},
+                        message, on_change=self.__update_confirm_button)
                 elif key == "selected_image":
                     pn = final.get("pretty_name") or value
                     self.active_widgets.append(
@@ -216,10 +231,15 @@ class BootcConfirm(Adw.Bin):
 
         for widget in self.active_widgets:
             self.group_changes.add(widget)
+        self.__update_confirm_button()
 
         self._btn_confirm_signal = self.btn_confirm.connect(
             "clicked", self.__on_confirm
         )
+
+    def __update_confirm_button(self):
+        self.btn_confirm.set_sensitive(
+            self._hostname_check is None or self._hostname_check.ok)
 
     def test_auto_advance(self):
         self.btn_confirm.emit("clicked")

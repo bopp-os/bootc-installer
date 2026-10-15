@@ -33,7 +33,8 @@ that you connect later.
 
 ## What a frontend shows
 
-`fixtures/<name>.expected.json` shows what a frontend must render from `fixtures/<name>.json`.
+`fixtures/<name>.expected.json` shows what a frontend must render from `fixtures/<name>.json`:
+the disks, `tpm_usable`, `unmet`, `live_image` and `offline_images`.
 Each frontend's tests load the fixture through that frontend's own reader,
 and must produce the same list.
 
@@ -57,6 +58,17 @@ and must produce the same list.
   (`too_small`). Frontends do not apply a minimum of their own.
 - **TPM:** offer the `tpm2-luks` encryption types only when `tpm.usable`
   is true.
+- **Live media:** `live.is_live` says whether the host booted from live
+  media. Only then may the recipe leave `image` empty, which means "install
+  the running image". Show `live.live_image` as that image. fisherman
+  rejects an empty `image` on any other host (`image_required`). Do not
+  look for live media in the frontend: inside a Flatpak it sees the
+  runtime, not the host, and `/run/ostree-booted` is on every installed
+  ostree host too.
+- **Offline images:** `offline.images` lists the image refs in the host's
+  offline stores. Use it for an "available offline" tag. Do not pass
+  `offline.stores` in the recipe: when `additionalImageStores` is absent,
+  fisherman exposes those stores itself (`shared/recipe/README.md`).
 - **Requirements:** `system.unmet` lists `ram`, `cpu` and `uefi` in that
   order. If the list is not empty, show the `requirements_title` copy and one
   `requirements_<id>` line for each item (`shared/branding/copy-defaults.json`).

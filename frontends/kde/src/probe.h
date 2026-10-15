@@ -39,6 +39,13 @@ struct Result {
     QList<Disk> disks;      // eligible only, in fisherman's order
     bool tpmUsable = false;
     QStringList unmet;      // "ram", "cpu", "uefi"
+    // live.is_live: the host booted from live media. Only then may the
+    // recipe leave `image` empty, which installs the running system.
+    bool isLive = false;
+    QString liveImage;      // live.live_image when live, else ""
+    // offline.images: refs in the host's offline stores. The stores are
+    // fisherman's: a recipe without additionalImageStores gets them.
+    QStringList offlineImages;
 };
 
 // Parses probe output. A failure is a Result with ok == false and an error.

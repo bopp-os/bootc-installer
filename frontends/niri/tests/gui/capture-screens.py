@@ -257,6 +257,10 @@ def main():
     root.setProperty("selectedDisk", probed["disks"][0])
     root.setProperty("hasTpm", probed["tpm_usable"])
     root.setProperty("unmet", probed["unmet"])
+    # The encryption choices the backend's `detect` reports: its embedded
+    # copy of fisherman's encryption-choices.json.
+    with open(os.path.join(REPO, "installer", "encryption-choices.json"), encoding="utf-8") as fh:
+        root.setProperty("encryptionChoices", json.load(fh)["choices"])
 
     frames, findings = [], []
     for name, page, _caption in PAGES:

@@ -3,12 +3,12 @@
 fisherman.
 
 The chain on a live ISO is QML -> `tuna-installer-niri install` (recipe on
-stdin) -> `sudo /usr/local/bin/fisherman <recipe>`. Quickshell cannot run
-headless, so the QML is loaded under PyQt6 with the stub modules from
-tests/qml-stubs, driven to Confirm, and its Install button pressed
-(startInstall). The stub Process records what the QML wrote to the backend's
-stdin instead of spawning it. That exact byte string is then piped to the
-REAL backend binary, which writes the 0600 recipe, launches fisherman
+stdin) -> `sudo /usr/local/bin/fisherman -` (recipe on stdin again).
+Quickshell cannot run headless, so the QML is loaded under PyQt6 with the
+stub modules from tests/qml-stubs, driven to Confirm, and its Install button
+pressed (startInstall). The stub Process records what the QML wrote to the
+backend's stdin instead of spawning it. That exact byte string is then piped
+to the REAL backend binary, which pipes it on to fisherman
 (shared/e2e/setup.sh's validating shim) and streams its output.
 
     python3 tests/e2e/run.py            # after: cd installer && go build -o tuna-installer-niri .
@@ -70,8 +70,9 @@ def main():
     # Drive the wizard the way a user would reach Install: pick the disk,
     # walk to Confirm, press Install.
     root.setProperty("branding", facts.get("branding") or {})
+    root.setProperty("isLive", facts.get("isLive") is True)
     root.setProperty("liveImage", facts.get("liveImage") or "")
-    root.setProperty("offlineStores", facts.get("offlineStores") or [])
+    root.setProperty("encryptionChoices", facts.get("encryptionChoices") or [])
     root.setProperty("disks", disks)
     root.setProperty("selectedDisk", chosen)
     root.setProperty("currentPage", 3)
@@ -79,9 +80,16 @@ def main():
     QMetaObject.invokeMethod(root, "startInstall")
     settle(300)
 
-    # Only the install Process ever receives a write(); the stub keeps it.
+    # The install Process's write(); the stub keeps it. The validate Process
+    # writes too (the page's fields, for `fisherman validate --partial`), so
+    # pick the one whose command is `install`.
+    def _command(obj):
+        cmd = obj.property("command")
+        cmd = cmd.toVariant() if hasattr(cmd, "toVariant") else cmd
+        return list(cmd or [])
+
     written = next((obj.property("written") for obj in root.findChildren(QObject)
-                    if obj.property("written")), None)
+                    if obj.property("written") and "install" in _command(obj)), None)
     if not written:
         sys.exit("FAIL: startInstall wrote nothing to the backend's stdin")
     recipe = json.loads(written)

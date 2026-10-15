@@ -14,9 +14,11 @@ from bootc_installer.utils.processor import Processor
 _SYS_RECIPE = {}
 
 
-def _load(path: str) -> dict:
-    with open(path) as f:
-        return json.load(f)
+def _load(recipe: dict) -> dict:
+    """gen_install_recipe returns the recipe itself: it goes to fisherman on
+    stdin, never to a file."""
+    assert isinstance(recipe, dict)
+    return recipe
 
 
 # ── Auto-disk helpers ──────────────────────────────────────────────────────────
@@ -530,16 +532,13 @@ class TestComposefs:
 # ── Misc / edge cases ──────────────────────────────────────────────────────────
 
 class TestMisc:
-    def test_returns_path_to_existing_file(self):
-        path = Processor.gen_install_recipe("log", _auto_finals(), _SYS_RECIPE)
-        assert os.path.exists(path)
-        assert path.endswith(".json")
+    def test_returns_the_recipe_not_a_path(self):
+        recipe = Processor.gen_install_recipe("log", _auto_finals(), _SYS_RECIPE)
+        assert isinstance(recipe, dict)
 
-    def test_recipe_is_valid_json(self):
-        path = Processor.gen_install_recipe("log", _auto_finals(), _SYS_RECIPE)
-        with open(path) as f:
-            data = json.load(f)
-        assert isinstance(data, dict)
+    def test_recipe_round_trips_as_json(self):
+        recipe = Processor.gen_install_recipe("log", _auto_finals(), _SYS_RECIPE)
+        assert json.loads(json.dumps(recipe)) == recipe
 
     def test_multiple_finals_dicts_merged(self):
         finals = [
@@ -950,23 +949,42 @@ class TestFindNvidiaImgref:
         assert result == ""
 
 
-class TestFlatpakCacheDir:
-    """Tests for the flatpak cache_dir path in gen_install_recipe."""
+class TestNoRecipeFile:
+    """The recipe holds the LUKS passphrase and the password hash; it goes to
+    `fisherman -` on stdin and is never written to disk (fisherman#276)."""
 
-    def test_flatpak_recipe_written_to_cache_dir(self, monkeypatch, tmp_path):
-        """In flatpak mode, the recipe JSON is written inside ~/.cache/bootc-installer/."""
+    def test_no_file_is_written_in_or_out_of_a_flatpak(self, monkeypatch, tmp_path):
         import os as _os
+        import tempfile as _tempfile
         import bootc_installer.utils.processor as proc_mod
 
-        cache_dir = tmp_path / ".cache" / "bootc-installer"
-        monkeypatch.setattr(_os.path, "exists", lambda p: p == "/.flatpak-info")
         monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setattr(_tempfile, "tempdir", str(tmp_path))
+        for flatpak in (False, True):
+            monkeypatch.setattr(_os.path, "exists", lambda p, f=flatpak: f and p == "/.flatpak-info")
+            enc = {"use_encryption": True, "encryption_key": "s3cret"}
+            recipe = proc_mod.Processor.gen_install_recipe(
+                "log", _auto_finals(encryption=enc), _SYS_RECIPE)
+            assert recipe["encryption"]["passphrase"] == "s3cret"
+        assert list(tmp_path.rglob("*")) == []
 
-        finals = _auto_finals()
-        path = proc_mod.Processor.gen_install_recipe("log", finals, _SYS_RECIPE)
+    def test_the_module_cannot_write_a_temp_file(self):
+        import bootc_installer.utils.processor as proc_mod
+        assert not hasattr(proc_mod, "tempfile")
 
-        assert str(cache_dir) in path
-        assert _os.path.isfile(path)
+
+class TestAdditionalImageStores:
+    """Left out, fisherman finds the host's offline stores itself; the
+    frontend passes only what the ISO's recipe names."""
+
+    def test_absent_unless_the_iso_recipe_names_stores(self):
+        assert "additionalImageStores" not in _load(
+            Processor.gen_install_recipe("log", _auto_finals(), {}))
+        assert "additionalImageStores" not in _load(
+            Processor.gen_install_recipe("log", _auto_finals(), {"additionalImageStores": []}))
+        r = _load(Processor.gen_install_recipe(
+            "log", _auto_finals(), {"additionalImageStores": ["/run/store"]}))
+        assert r["additionalImageStores"] == ["/run/store"]
 
 
 class TestLiveISOFallback:
@@ -1024,36 +1042,29 @@ class TestLiveISOFallback:
 class TestRecipeNamesDisk:
     """#154: the window refuses to start fisherman on a recipe with no disk."""
 
-    def _write(self, tmp_path, obj):
-        path = tmp_path / "recipe.json"
-        path.write_text(json.dumps(obj))
-        return str(path)
-
-    def test_empty_disk_is_refused(self, tmp_path):
+    def test_empty_disk_is_refused(self):
         for value in ("", "   ", None):
-            assert not Processor.recipe_names_disk(self._write(tmp_path, {"disk": value}))
+            assert not Processor.recipe_names_disk({"disk": value})
 
-    def test_missing_disk_key_is_refused(self, tmp_path):
-        assert not Processor.recipe_names_disk(self._write(tmp_path, {}))
+    def test_missing_disk_key_is_refused(self):
+        assert not Processor.recipe_names_disk({})
 
-    def test_unreadable_recipe_is_refused(self, tmp_path):
-        assert not Processor.recipe_names_disk(str(tmp_path / "nope.json"))
-        bad = tmp_path / "bad.json"
-        bad.write_text("{not json")
-        assert not Processor.recipe_names_disk(str(bad))
+    def test_unreadable_recipe_is_refused(self):
+        assert not Processor.recipe_names_disk(None)
+        assert not Processor.recipe_names_disk("not a recipe")
 
-    def test_named_disk_is_accepted(self, tmp_path):
-        assert Processor.recipe_names_disk(self._write(tmp_path, {"disk": "/dev/nvme0n1"}))
+    def test_named_disk_is_accepted(self):
+        assert Processor.recipe_names_disk({"disk": "/dev/nvme0n1"})
 
-    def test_no_disk_finals_produce_a_refused_recipe(self, tmp_path):
+    def test_no_disk_finals_produce_a_refused_recipe(self):
         """The real path from #154: no partition recipe -> {"disk": {}} finals
         -> a generated recipe the guard must refuse."""
         finals = _auto_finals()
         assert finals[0]["disk"]["auto"]["disk"]  # a real disk, before the edit
         finals[0]["disk"] = {}
-        path = Processor.gen_install_recipe("log", finals, _SYS_RECIPE)
-        assert _load(path)["disk"] == ""
-        assert not Processor.recipe_names_disk(path)
+        recipe = Processor.gen_install_recipe("log", finals, _SYS_RECIPE)
+        assert recipe["disk"] == ""
+        assert not Processor.recipe_names_disk(recipe)
         # and the same finals with the disk restored are accepted
         assert Processor.recipe_names_disk(Processor.gen_install_recipe("log", _auto_finals(), _SYS_RECIPE))
 

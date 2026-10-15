@@ -44,7 +44,7 @@ Root-level CLI that reads a JSON recipe and executes a 9-step disk install pipel
 - `--skip-finalize` is passed to bootc so step 9 can manually finalize (fstrim → remount ro → fsfreeze/thaw), because `bootc install finalize` is a no-op upstream.
 
 ### bootc-installer (Python, `bootc_installer/`)
-GTK4/Adwaita GUI that collects user choices, writes a recipe JSON, launches fisherman via VTE terminal.
+GTK4/Adwaita GUI that collects user choices, builds a recipe, and pipes it to fisherman on stdin (`fisherman -`).
 
 **Flatpak sandbox constraints:**
 - fisherman runs on the **host** via `flatpak-spawn --host pkexec <path>`.
@@ -86,7 +86,7 @@ would take, with the failing build output for COSMIC.
 - **Don't remove the dedicated ext4 `/boot` partition from the GRUB2 layout.** It is required for GRUB2 images; systemd-boot images intentionally use the 2-partition layout described above.
 - **Don't use `/run/*` for scratch space.** Always use `/var/fisherman-tmp`.
 - **Don't skip the submodule push.** Changes in `fisherman/` must be pushed before updating the parent pointer, or CI breaks.
-- **Don't pass recipe directly to fisherman from filesystem.** The Flatpak sandbox can't see it — use the host staging path.
+- **Don't write the recipe to a file.** Every frontend pipes it to `fisherman -` on stdin through its wrapper (`bash -c 'pkexec /usr/local/bin/fisherman -; exit $?'`, with `flatpak-spawn --host` in front in a Flatpak) and closes stdin; the recipe holds the LUKS passphrase. Leave `additionalImageStores` out unless the ISO's recipe names stores (fisherman finds the host's), take live media from `fisherman probe --json`, and check fields with `fisherman validate --json --partial -`. See `shared/recipe/README.md`.
 - **Don't push to `prod` or cut releases from `dev`.** `promote.yml` owns `prod`; `release.yml` owns tags and the Flatpak remote. Rolling release tags (`latest-stable`) are banned by ruleset history.
 - **Don't add a `.github/` under `frontends/<name>/`.** Workflows only run from the root.
 - **Don't hardcode a product.** No "TunaOS", "Bluefin", image ref, hostname, URL, vendor, quote, tagline, store or artwork in any frontend: read `shared/branding/README.md` and go through that frontend's branding resolver (`copy` keys for every rebrandable line, `assets` for artwork). The screenshot workflows set `BOOTC_INSTALLER_PRODUCT_NAME` for the docs; the bundled GNOME `recipe.json` carries no product strings; Bluefin's live in `shared/branding/examples/bluefin/`, which the live ISO ships. `docs/PARITY.md` says what each frontend renders.

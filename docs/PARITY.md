@@ -67,6 +67,7 @@ claimed a render that nobody had wired up.
 | `done_subtitle` | header subtitle (+ elapsed time) | label | body | label | label |
 | `done_restart` | Reboot Now button | Restart button | suggested button | button | Reboot button |
 | `done_failed_title` | page header | heading | title2 | heading | headline |
+| `validate_*` | error line under the hostname (disk and confirm pages) and the username | inline message on the encryption step (passphrase) and the confirm step (hostname) | hostname row description; encryption row description | line under the hostname (confirm) and under the passphrase | line under the hostname, the username and the encryption choice |
 | `store_label` | done page link to `store_url` (+ QR from `assets.store_qr`, US locale) | done page link | done page link | done page link | done page link |
 | `assets.welcome_image`, `assets.complete_image` | tour pages | no | no | welcome logo disc (`logo`) | no |
 
@@ -97,6 +98,15 @@ the Flatpak copy, where the old calculation in each frontend stopped.
 XFCE hides its step label when it repeats the page title, which is the case
 for `step_install_os` with the default copy.
 
+The `validate_*` keys word fisherman's problems. Each frontend sends its
+fields to `fisherman validate --json --partial -` while the user types and
+shows each problem through the key `validate_<code>`
+(`shared/recipe/README.md`). The codes are fisherman's
+(`fisherman/docs/VALIDATE.md`), so the table has one row for the family. A
+code with no copy line shows fisherman's own message. Before this, only
+XFCE checked the hostname, and a username such as `root` failed after the
+OS was on disk.
+
 Outside the contract, under `extensions.gnome`: the tour page text, the
 install video and the credits file. They are the last GNOME-only features.
 The plan is to port the tour artwork (welcome and complete images) to the
@@ -111,8 +121,10 @@ All five render the identity keys (`name`, `id`, `default_hostname`,
 | Feature | GNOME | KDE | COSMIC | Niri | XFCE |
 |---|---|---|---|---|---|
 | Image catalog choice | yes (fisherman `images.json`) | no (live or `default_image`) | no (live or `default_image`) | no (live or `default_image`) | yes |
-| Live-ISO install without download | yes | yes | yes | yes | yes |
-| Offline image stores | yes | yes | yes | yes | yes |
+| Live-ISO install without download (live media from `fisherman probe --json`) | yes | yes | yes | yes | yes |
+| Offline image stores (found by fisherman on the host) | yes | yes | yes | yes | yes |
+| Recipe on fisherman's stdin, no recipe file | yes | yes | yes | yes | yes |
+| Fields checked by `fisherman validate --json --partial` | hostname, username | passphrase, hostname | hostname, passphrase | hostname, passphrase | hostname, username, passphrase |
 | Disk choice with erase warning | yes | yes | yes | yes | yes |
 | Disk list from `fisherman probe --json` (`shared/probe/`) | yes | yes | yes | yes | yes |
 | Disk row: model (path when unknown), path, size label, bus | yes | yes | yes | yes | yes |

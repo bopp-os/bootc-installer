@@ -129,18 +129,28 @@ pub fn page_text(app: &TunaInstaller) -> Vec<String> {
                 OPTIONS_SYSTEM.to_string(),
                 OPTIONS_HOSTNAME.to_string(),
                 recipe.hostname.clone(),
+            ];
+            if let Some(p) = app.problem("hostname") {
+                t.push(p.render());
+            }
+            t.extend([
                 OPTIONS_FILESYSTEM.to_string(),
                 recipe.filesystem.clone(),
                 OPTIONS_ENCRYPTION.to_string(),
                 OPTIONS_DISK_ENCRYPTION.to_string(),
-            ];
+            ]);
             if let Some(c) = current {
                 t.push(encryption_text(c, "_label"));
                 t.push(encryption_text(c, "_description"));
             }
-            if recipe.encryption.enc_type.contains("passphrase") {
+            if crate::validate::needs_passphrase(&recipe.encryption.enc_type) {
                 t.push(OPTIONS_PASSPHRASE.to_string());
                 t.push(OPTIONS_PASSPHRASE_HINT.to_string());
+            }
+            for field in ["encryption", "filesystem", "btrfsSubvolumes"] {
+                if let Some(p) = app.problem(field) {
+                    t.push(p.render());
+                }
             }
             t.push(BACK.to_string());
             if app.encryption_ok() {
@@ -226,6 +236,8 @@ fn confirm_disk(app: &TunaInstaller) -> String {
 
 fn confirm_image(app: &TunaInstaller) -> String {
     match (app.live_image(), app.recipe().image.is_empty()) {
+        // Live media (fisherman's probe): the running system is installed.
+        (Some(""), true) => format!("this system{CONFIRM_LIVE_SUFFIX}"),
         (Some(live), true) => format!("{live}{CONFIRM_LIVE_SUFFIX}"),
         _ => app.recipe().image.clone(),
     }
@@ -432,25 +444,35 @@ fn options(app: &TunaInstaller) -> Element<'_, Message> {
         .and_then(|i| enc_choices.get(i))
         .map(|c| encryption_text(c, "_description"))
         .unwrap_or_default();
-    // "luks-passphrase" and "tpm2-luks-passphrase" both contain this
-    // substring; bare "tpm2-luks" and "none" don't. Same test `encryption_ok()`
-    // uses to gate Continue below, so the field's presence and the field's
-    // requiredness can never disagree.
-    let needs_passphrase = recipe.encryption.enc_type.contains("passphrase");
+    // The choice's needs_passphrase (encryption-choices.json). Whether the
+    // passphrase is acceptable is fisherman's answer (`encryption_ok()`).
+    let needs_passphrase = crate::validate::needs_passphrase(&recipe.encryption.enc_type);
 
+    // fisherman's hostname rule, in the copy's words, under the field.
+    let mut hostname_item = widget::settings::item::builder(OPTIONS_HOSTNAME);
+    if let Some(p) = app.problem("hostname") {
+        hostname_item = hostname_item.description(p.render());
+    }
     let system = widget::settings::section()
         .title(OPTIONS_SYSTEM)
-        .add(widget::settings::item(
-            OPTIONS_HOSTNAME,
-            widget::text_input(branding::get().default_hostname.as_str(), &recipe.hostname)
-                .on_input(Message::HostnameChanged)
-                .width(Length::Fixed(260.0)),
-        ))
+        .add(
+            hostname_item.control(
+                widget::text_input(branding::get().default_hostname.as_str(), &recipe.hostname)
+                    .on_input(Message::HostnameChanged)
+                    .width(Length::Fixed(260.0)),
+            ),
+        )
         .add(widget::settings::item(
             OPTIONS_FILESYSTEM,
             widget::dropdown(&FILESYSTEMS, fs_index, Message::FilesystemChanged),
         ));
 
+    // fisherman's problem with the choice (an empty passphrase, LUKS on
+    // ZFS) replaces the description while it stands.
+    let enc_description = ["encryption", "filesystem", "btrfsSubvolumes"]
+        .iter()
+        .find_map(|f| app.problem(f))
+        .map_or(enc_description, |p| p.render());
     let mut security = widget::settings::section().title(OPTIONS_ENCRYPTION).add(
         widget::settings::item::builder(OPTIONS_DISK_ENCRYPTION)
             .description(enc_description)
@@ -498,9 +520,9 @@ fn options(app: &TunaInstaller) -> Element<'_, Message> {
         body.into(),
         nav_row(
             Some(Message::BackPage),
-            // Blocked while a passphrase-carrying choice has an empty
-            // passphrase, so this can never reach Confirm/Install and only
-            // then discover fisherman rejects the recipe (tunaOS#734).
+            // Blocked while fisherman reports a problem with the page (an
+            // empty passphrase, a bad hostname), so it can never reach
+            // Confirm/Install and only then be rejected (tunaOS#734).
             app.encryption_ok()
                 .then_some((CONTINUE.to_string(), Message::NextPage, false)),
         ),
@@ -777,11 +799,10 @@ fn page_frame<'a>(
 #[cfg(test)]
 mod tests {
     use super::encryption_text;
-    use crate::ENCRYPTION_TYPES;
 
     #[test]
     fn every_encryption_type_has_a_label_and_a_description() {
-        for id in ENCRYPTION_TYPES {
+        for id in crate::validate::choices().iter().map(|c| c.enc_type.as_str()) {
             assert!(!encryption_text(id, "_label").is_empty(), "{id}: no label");
             assert!(
                 !encryption_text(id, "_description").is_empty(),

@@ -8,7 +8,6 @@ import stat
 logger = logging.getLogger("Installer::FishermanRunner")
 
 IN_FLATPAK = os.path.exists("/.flatpak-info")
-LIVE_ISO = not IN_FLATPAK and os.path.exists("/run/ostree-booted")
 
 
 def default_stage_base() -> str:
@@ -27,26 +26,49 @@ LOG_PATH = os.path.join(CACHE_DIR, "fisherman-output.log")
 
 
 def build_argv(
-    recipe: str,
     *,
     in_flatpak: bool = IN_FLATPAK,
-    live_iso: bool = LIVE_ISO,
+    use_sudo: bool = False,
     host_path: str = HOST_PATH,
     log_path: str = LOG_PATH,
 ) -> list[str]:
-    """Build the host-side command used to run fisherman and capture output."""
+    """Build the host-side command that runs fisherman and captures its output.
+
+    fisherman reads the recipe from stdin (`fisherman -`, tuna-os/fisherman#276):
+    the caller writes the JSON to the wrapper's stdin and closes it, so no
+    recipe file ever holds the passphrase or the user password. bash, pkexec,
+    sudo and flatpak-spawn all pass stdin through. stdout and stderr go to the
+    log file, which the progress page tails.
+
+    `use_sudo` is for live media outside a Flatpak, where the live user has
+    passwordless sudo and may have no polkit agent. The caller decides it from
+    fisherman's probe (`live.is_live`), never from /run/ostree-booted, which
+    every installed ostree host has.
+    """
     if in_flatpak:
         if os.environ.get("BOOTC_TEST"):
             binary = os.environ.get("BOOTC_FISHERMAN_PATH", host_path)
-            command = f'sudo "{binary}" "$1" >"{log_path}" 2>&1; exit $?'
+            command = f'sudo "{binary}" - >"{log_path}" 2>&1; exit $?'
         else:
-            command = f'pkexec "{host_path}" "$1" >"{log_path}" 2>&1; exit $?'
-        return ["flatpak-spawn", "--host", "bash", "-c", command, "--", recipe]
-    if live_iso:
-        command = f'sudo /usr/local/bin/fisherman "$1" >"{log_path}" 2>&1; exit $?'
-    else:
-        command = f'pkexec /usr/local/bin/fisherman "$1" >"{log_path}" 2>&1; exit $?'
-    return ["bash", "-c", command, "--", recipe]
+            command = f'pkexec "{host_path}" - >"{log_path}" 2>&1; exit $?'
+        return ["flatpak-spawn", "--host", "bash", "-c", command]
+    escalate = "sudo" if use_sudo else "pkexec"
+    command = f'{escalate} /usr/local/bin/fisherman - >"{log_path}" 2>&1; exit $?'
+    return ["bash", "-c", command]
+
+
+def fisherman_argv(
+    *,
+    in_flatpak: bool = IN_FLATPAK,
+    host_path: str = HOST_PATH,
+) -> list[str]:
+    """The unprivileged way to reach fisherman, for `probe --json` and
+    `validate --json`: the same binary the install runs, on the host, as the
+    desktop user. In a Flatpak that is the staged copy, so the caller stages
+    it first (stage_on_host)."""
+    if in_flatpak:
+        return ["flatpak-spawn", "--host", host_path]
+    return ["/usr/local/bin/fisherman"]
 
 
 def probe_argv(
@@ -56,13 +78,9 @@ def probe_argv(
 ) -> list[str]:
     """The unprivileged `fisherman probe --json` command (shared/probe/README.md).
 
-    The same fisherman the install runs, on the host, as the desktop user:
-    the probe needs no root. In a Flatpak that is the staged copy, so the
-    caller stages it first (stage_on_host).
+    Never through pkexec or sudo: the probe needs no root.
     """
-    if in_flatpak:
-        return ["flatpak-spawn", "--host", host_path, "probe", "--json"]
-    return ["/usr/local/bin/fisherman", "probe", "--json"]
+    return fisherman_argv(in_flatpak=in_flatpak, host_path=host_path) + ["probe", "--json"]
 
 
 def path_is_private(path: str, check_mode: bool = True) -> bool:

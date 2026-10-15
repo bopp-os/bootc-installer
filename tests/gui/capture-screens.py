@@ -72,9 +72,22 @@ os.environ["XDG_DATA_DIRS"] = os.pathsep.join([
 # instead: four plausible disks, a usable TPM 2.0 (so the TPM row shows,
 # which no CI runner could), every requirement met. Same fixture the other
 # frontends' captures read.
-os.environ.setdefault(
-    "BOOTC_INSTALLER_FAKE_PROBE",
-    os.path.join(REPO, "shared", "probe", "fixtures", "laptop.json"))
+#
+# The fixture is a laptop booted from a live USB, and live media now comes
+# from the probe (live.is_live): on live media GNOME drops the image page and
+# installs the running image. This walkthrough shows the image page, so it
+# reads the same laptop as an installed (not live) session.
+if not os.environ.get("BOOTC_INSTALLER_FAKE_PROBE"):
+    import json as _json
+    import tempfile as _tempfile
+    with open(os.path.join(REPO, "shared", "probe", "fixtures", "laptop.json"),
+              encoding="utf-8") as _fh:
+        _probe = _json.load(_fh)
+    _probe["live"] = {"is_live": False, "live_image": ""}
+    _fd, _path = _tempfile.mkstemp(prefix="gnome-capture-probe-", suffix=".json")
+    with os.fdopen(_fd, "w", encoding="utf-8") as _fh:
+        _json.dump(_probe, _fh)
+    os.environ["BOOTC_INSTALLER_FAKE_PROBE"] = _path
 # Skip the RAM / CPU / UEFI gate windows: this is a render of the wizard.
 os.environ.setdefault("IGNORE_RAM", "1")
 os.environ.setdefault("IGNORE_CPU", "1")

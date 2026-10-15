@@ -12,7 +12,6 @@ from bootc_installer.core.disks import Diskutils
 from bootc_installer.views.progress import (
     _FISHERMAN_HOST_PATH,
     _IN_FLATPAK,
-    _LIVE_ISO,
     _stage_fisherman_on_host,
 )
 
@@ -190,9 +189,6 @@ class BootcDefaultSlurp(Adw.Bin):
         for candidate in (env_path, "/usr/local/bin/fisherman", "/usr/bin/fisherman"):
             if candidate and os.path.exists(candidate):
                 return candidate
-
-        if _LIVE_ISO and os.path.exists("/usr/local/bin/fisherman"):
-            return "/usr/local/bin/fisherman"
         return None
 
     def __run_scan(self, fisherman_path: str, disk: str):

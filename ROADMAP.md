@@ -137,6 +137,28 @@ runs `lsblk` to list disks, and `tests/unit/test_shared_tpm.py` fails if one
 probes the TPM. The probe's live-image and offline-store facts are not used
 yet; F3 moves them.
 
+**F3 status (2026-10-15): frontends switched.** fisherman#276 reads the
+recipe from stdin and finds the offline stores on the host. It rejects an
+empty image off live media. All five frontends pipe the recipe to
+`fisherman -` and write no recipe file; none looks for live media or
+offline stores itself. Live media and the "available offline" tags come
+from the probe's `live` and `offline` sections. A frontend writes
+`additionalImageStores` only when the ISO's recipe names stores.
+`tests/unit/test_no_frontend_detection.py` fails if a frontend detects
+either again or writes a recipe file.
+
+**F4 status (2026-10-15): frontends switched.** fisherman#277 adds
+`fisherman validate --json [--partial]` and `data/encryption-choices.json`.
+Each frontend checks its fields with `validate --json --partial -` while
+the user types and shows each problem through a `validate_<code>` copy key:
+the hostname in all five (new for GNOME, COSMIC and Niri), the username in
+GNOME and XFCE, the passphrase in KDE, COSMIC, Niri and XFCE. The
+in-frontend hostname, username and passphrase-required rules are gone;
+password strength and confirmation stay in the frontends.
+`shared/recipe/encryption-choices.json` is fisherman's file byte for byte;
+KDE, COSMIC, Niri and XFCE read a copy of it and use `needs_passphrase` and
+`needs_tpm2` instead of the type's name.
+
 ## Planned features
 
 The maintainer approved these on 2026-10-08. They are not scheduled yet.

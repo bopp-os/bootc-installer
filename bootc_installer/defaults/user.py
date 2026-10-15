@@ -5,6 +5,8 @@ import os
 
 from gi.repository import Adw, Gtk
 
+from bootc_installer.utils.field_check import FieldCheck
+
 logger = logging.getLogger("Installer::User")
 
 _IN_FLATPAK = os.path.exists("/.flatpak-info")
@@ -33,6 +35,21 @@ class BootcDefaultUsers(Adw.Bin):
         self.__key = key
         self.__step = step
         self.delta = False
+
+        # The username rule is fisherman's (`fisherman validate --json
+        # --partial -`): it also refuses names the target already has, such
+        # as root or wheel, which a pattern here never could. A username
+        # fisherman refused used to fail in the configure step, after the OS
+        # was on disk.
+        self.username_message = Gtk.Label(xalign=0, wrap=True, margin_top=6)
+        self.username_message.add_css_class("error")
+        group = self.username_entry.get_ancestor(Adw.PreferencesGroup)
+        if group is not None:
+            group.add(self.username_message)
+        self.username_check = FieldCheck(
+            window, self.username_entry, "user.username",
+            lambda text: {"user": {"username": text.strip()}},
+            self.username_message, on_change=self.__update_btn_next)
 
         self.fullname_entry.connect("changed", self.__on_fullname_changed)
         self.username_entry.connect("changed", self.__on_field_changed)
@@ -118,18 +135,11 @@ class BootcDefaultUsers(Adw.Bin):
         return re.sub(r"[^a-z0-9_-]", "", name)
 
     def __on_field_changed(self, *args):
-        username = self.username_entry.get_text().strip()
         password = self.password_entry.get_text()
         confirm  = self.password_confirmation.get_text()
 
-        # Username: must start with letter/underscore, only lowercase alnum + _ -
-        username_ok = bool(re.match(r"^[a-z_][a-z0-9_-]{0,31}$", username)) if username else False
-
-        if username and not username_ok:
-            self.username_entry.add_css_class("error")
-        else:
-            self.username_entry.remove_css_class("error")
-
+        # The password rules stay here: fisherman accepts any password,
+        # including an empty one (VALIDATE.md, "Not fisherman rules").
         passwords_match = password == confirm and bool(password)
         if confirm and not passwords_match:
             self.password_confirmation.add_css_class("error")
@@ -178,7 +188,9 @@ class BootcDefaultUsers(Adw.Bin):
         password = self.password_entry.get_text()
         confirm  = self.password_confirmation.get_text()
 
-        username_ok = bool(re.match(r"^[a-z_][a-z0-9_-]{0,31}$", username)) if username else False
+        # A user page needs a user (the image has no other way to log in);
+        # whether the name is acceptable is fisherman's answer.
+        username_ok = bool(username) and self.username_check.ok
         passwords_match = password == confirm and bool(password)
 
         self.btn_next.set_sensitive(username_ok and passwords_match)

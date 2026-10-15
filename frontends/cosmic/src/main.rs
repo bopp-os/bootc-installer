@@ -17,6 +17,7 @@ mod probe;
 mod progress;
 mod branding;
 mod ui;
+mod validate;
 
 use cosmic::app::{Core, Settings, Task};
 use cosmic::iced::{Length, Size};
@@ -118,38 +119,35 @@ impl Page {
     }
 }
 
-/// The recipe's encryption types, in display order.
-///
-/// Each id is what actually lands in `recipe.encryption.type`, and it MUST be
-/// one of the values `fisherman` accepts (`fisherman/internal/recipe/recipe.go`
-/// `Validate()`). Anything else — the previous `"luks"` here — fails recipe
-/// validation and the install never starts, which is a worse failure mode
-/// than never offering encryption at all: the user thinks they chose it.
-///
-/// The ids and their order are the enum of
-/// `shared/recipe/fisherman-recipe.schema.json`;
-/// `tests/unit/test_encryption_choices.py` holds all five frontends to it.
-/// What each one is called is branding copy (`encryption_<type>_label` and
-/// `_description`, shared/branding/README.md), read in `ui.rs`. The two
-/// `tpm2-` types are offered only when a TPM2 chip is present (tunaOS#734).
-pub const ENCRYPTION_TYPES: [&str; 4] = [
-    "none",
-    "luks-passphrase",
-    "tpm2-luks",
-    "tpm2-luks-passphrase",
-];
-
-/// The choices actually selectable right now. TPM-gated entries are dropped
-/// entirely rather than shown-disabled when there is no TPM — same call
-/// `tuna-installer-xfce` makes (`SetupPage.__init__`: `if value.startswith("tpm2")
-/// and not self.has_tpm: continue`), and for the same reason: a dropdown entry
-/// that silently produces an unenrollable recipe is worse than one that isn't
-/// offered.
+/// The encryption types offered right now, in display order: fisherman's
+/// encryption-choices.json (`validate::choices`, a byte-identical copy
+/// compiled in). A `needs_tpm2` type is dropped entirely rather than shown
+/// disabled when fisherman says no TPM 2.0 is usable (tunaOS#734): a dropdown
+/// entry that produces an unenrollable recipe is worse than one that isn't
+/// offered. What each one is called is branding copy
+/// (`encryption_<type>_label` / `_description`), read in `ui.rs`.
 pub fn available_encryption_choices(has_tpm: bool) -> Vec<&'static str> {
-    ENCRYPTION_TYPES
-        .into_iter()
-        .filter(|id| has_tpm || !id.starts_with("tpm2"))
+    validate::choices()
+        .iter()
+        .filter(|c| has_tpm || !validate::needs_tpm2(&c.enc_type))
+        .map(|c| c.enc_type.as_str())
         .collect()
+}
+
+/// The options page's fields as a partial recipe, for
+/// `validate --json --partial -` on stdin (never argv: the passphrase is one
+/// of them). The passphrase goes only with a needs_passphrase choice.
+fn partial_recipe(r: &Recipe) -> serde_json::Value {
+    let mut encryption = serde_json::json!({ "type": r.encryption.enc_type });
+    if validate::needs_passphrase(&r.encryption.enc_type) {
+        encryption["passphrase"] = serde_json::json!(r.encryption.passphrase);
+    }
+    serde_json::json!({
+        "hostname": r.hostname,
+        "filesystem": r.filesystem,
+        "btrfsSubvolumes": r.btrfs_subvolumes,
+        "encryption": encryption,
+    })
 }
 
 // -------------------------------------------------------------- messages ----
@@ -161,8 +159,9 @@ pub enum Message {
     SelectDisk(usize),
     /// `fisherman probe --json` answered (shared/probe/README.md).
     Probed(Result<probe::Facts, String>),
-    /// Resolved asynchronously so init() never blocks on a host command.
-    LiveImageResolved(Option<String>),
+    /// `fisherman validate --json --partial` answered for check number `.0`
+    /// (shared/recipe/README.md). An answer for an older check is dropped.
+    Validated(u64, Result<Vec<validate::Problem>, String>),
     HostnameChanged(String),
     FilesystemChanged(usize),
     EncryptionChanged(usize),
@@ -195,7 +194,14 @@ pub enum Message {
 pub struct TunaInstaller {
     core: Core,
     page: Page,
+    /// `Some` (the booted image, possibly "") when fisherman's probe says the
+    /// host booted from live media (`live.is_live`); then the recipe leaves
+    /// `image` empty and fisherman installs the running system.
     live_image: Option<String>,
+    /// fisherman's problems with the options page's fields
+    /// (`validate --json --partial`), and the number of the latest check.
+    problems: Vec<validate::Problem>,
+    validate_seq: u64,
     recipe: Recipe,
     disks: Vec<DiskInfo>,
     selected_disk: Option<usize>,
@@ -285,7 +291,8 @@ impl TunaInstaller {
         self.probed
     }
 
-    /// Takes in a probe answer: the disks, TPM and requirements together.
+    /// Takes in a probe answer: the disks, TPM, requirements and live media
+    /// together.
     fn apply_probe(&mut self, result: Result<probe::Facts, String>) {
         self.probed = true;
         match result {
@@ -293,6 +300,18 @@ impl TunaInstaller {
                 self.disk_error = None;
                 self.has_tpm = facts.tpm_usable;
                 self.unmet = facts.unmet;
+                // Live media is fisherman's answer. This used to be a
+                // `bootc status` of our own plus /run/ostree-live and
+                // /proc/cmdline, read inside the Flatpak sandbox.
+                if facts.is_live {
+                    self.live_image = Some(facts.live_image);
+                    self.recipe.image.clear();
+                } else {
+                    self.live_image = None;
+                    if self.recipe.image.is_empty() {
+                        self.recipe.image = branding::get().default_image.clone();
+                    }
+                }
                 let keep = self
                     .selected_disk
                     .and_then(|i| self.disks.get(i))
@@ -315,20 +334,41 @@ impl TunaInstaller {
             .unwrap_or_default();
     }
 
-    /// Whether the Options page is allowed to advance. The dropdown can only
-    /// ever hold a valid `enc_type` (see `Message::EncryptionChanged`), so the
-    /// one thing left to check is the passphrase fisherman's own `Validate()`
-    /// requires for "luks-passphrase" and "tpm2-luks-passphrase": both contain
-    /// the substring "passphrase", matching `tuna-installer-xfce`'s
-    /// `"passphrase" in enc_type()` check. Without this gate, a user who left
-    /// the field blank would sail through Confirm and only discover the
-    /// problem when fisherman rejects the recipe on the Installing page.
+    /// fisherman's problem with a field of the options page, if it reported
+    /// one: "hostname", or a prefix such as "encryption".
+    pub fn problem(&self, field: &str) -> Option<&validate::Problem> {
+        self.problems
+            .iter()
+            .find(|p| p.field == field || p.field.starts_with(&format!("{field}.")))
+    }
+
+    /// Whether the Options page is allowed to advance: fisherman knows no
+    /// problem with the hostname, the filesystem or the encryption choice
+    /// (an empty passphrase is `encryption_passphrase_required`). The rules
+    /// are fisherman's; a check that could not run blocks nothing, because
+    /// the install runs the same rules before it touches a disk.
     pub fn encryption_ok(&self) -> bool {
-        if self.recipe.encryption.enc_type.contains("passphrase") {
-            !self.recipe.encryption.passphrase.is_empty()
-        } else {
-            true
+        self.problems.is_empty()
+    }
+
+    /// Asks fisherman about the options page after a pause in the typing,
+    /// off the UI thread. Never in capture mode: nothing shells out there.
+    fn check_fields(&mut self) -> Task<Message> {
+        if self.capturing() {
+            return Task::none();
         }
+        self.validate_seq += 1;
+        let seq = self.validate_seq;
+        let partial = partial_recipe(&self.recipe);
+        Task::perform(
+            async move {
+                tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                tokio::task::spawn_blocking(move || validate::check(&partial))
+                    .await
+                    .map_err(|e| format!("Task join error: {e}"))?
+            },
+            move |r| cosmic::action::app(Message::Validated(seq, r)),
+        )
     }
 
     fn advance(&mut self) -> Option<Page> {
@@ -373,7 +413,7 @@ impl cosmic::Application for TunaInstaller {
         // Recipe::default() is neutral; the product identity comes from the
         // branding contract (shared/branding/README.md). The default image
         // is what a non-live install writes when nothing else chooses one;
-        // live-ISO mode clears it below.
+        // the probe clears it on live media (apply_probe).
         let mut recipe = Recipe::default();
         {
             let b = branding::get();
@@ -381,40 +421,15 @@ impl cosmic::Application for TunaInstaller {
             recipe.hostname = b.default_hostname.clone();
             recipe.image = b.default_image.clone();
         }
-        let live;
-        let mut init_tasks: Vec<Task<Message>> = Vec::new();
-
-        if capturing {
-            // Fixtures. In capture mode nothing shells out: no `bootc status`,
-            // no `fisherman probe`, no `podman`. The machine in the
-            // screenshots does not exist, so the output is deterministic and
-            // CI never sees a disk.
-            live = Some(capture::FIXTURE_LIVE_IMAGE.to_string());
-            recipe.image = String::new();
-        } else {
-            // Offline install support (spec §4): live-ISO mode installs the
-            // running container (empty image); embedded stores are always
-            // passed.
-            //
-            // `live_iso_image` shells out to the host via flatpak-spawn and
-            // MUST NOT block init(). Iced creates the window *after* init
-            // returns, so a hung host command would leave the process alive
-            // with no window — exactly the failure mode tunaOS#678 caught.
-            // Defer it to an async task and start with `live_image = None`;
-            // the Confirm page handles `None` gracefully (it just shows the
-            // default image ref).
-            init_tasks.push(Task::perform(
-                tokio::task::spawn_blocking(offline::live_iso_image),
-                |r| cosmic::action::app(Message::LiveImageResolved(r.unwrap_or(None))),
-            ));
-            recipe.additional_image_stores = offline::offline_stores();
-            live = None;
-        }
+        // No additional_image_stores: left out, fisherman exposes the offline
+        // stores it finds on the host (tuna-os/fisherman#276).
 
         let mut app = Self {
             core,
             page: Page::Welcome,
-            live_image: live,
+            live_image: None,
+            problems: Vec::new(),
+            validate_seq: 0,
             recipe,
             selected_disk: None,
             disks: Vec::new(),
@@ -446,13 +461,13 @@ impl cosmic::Application for TunaInstaller {
         // os-release), never a literal — see `branding`.
         let window_title = format!("{} Installer", branding::name());
         let mut tasks = vec![app.set_window_title(window_title.clone())];
-        tasks.append(&mut init_tasks);
         if app.capture.is_some() {
             tasks.push(capture::begin());
         } else {
             tasks.push(Task::perform(Self::probe(), |r| {
                 cosmic::action::app(Message::Probed(r))
             }));
+            tasks.push(app.check_fields());
         }
         app.set_header_title(window_title);
 
@@ -512,23 +527,25 @@ impl cosmic::Application for TunaInstaller {
                 self.apply_probe(result);
                 Task::none()
             }
-            Message::LiveImageResolved(live) => {
-                self.live_image = live;
-                if self.live_image.is_some() {
-                    self.recipe.image = String::new();
+            Message::Validated(seq, result) => {
+                if seq == self.validate_seq {
+                    self.problems = result.unwrap_or_else(|e| {
+                        tracing::warn!("fisherman validate could not run: {e}");
+                        Vec::new()
+                    });
                 }
                 Task::none()
             }
             Message::HostnameChanged(h) => {
                 self.recipe.hostname = h;
-                Task::none()
+                self.check_fields()
             }
             Message::FilesystemChanged(idx) => {
                 if let Some(fs) = FILESYSTEMS.get(idx) {
                     self.recipe.filesystem = (*fs).to_string();
                     self.recipe.btrfs_subvolumes = *fs == "btrfs";
                 }
-                Task::none()
+                self.check_fields()
             }
             Message::EncryptionChanged(idx) => {
                 // Recompute the same has_tpm-filtered list ui.rs built the
@@ -537,20 +554,18 @@ impl cosmic::Application for TunaInstaller {
                 let choices = available_encryption_choices(self.has_tpm);
                 if let Some(choice) = choices.get(idx) {
                     self.recipe.encryption.enc_type = choice.to_string();
-                    // Only "luks-passphrase" and "tpm2-luks-passphrase" carry a
-                    // passphrase; clear it for "none" and bare "tpm2-luks" so a
-                    // stale value from a previous choice can't linger into the
-                    // recipe (fisherman ignores it, but Confirm would still
-                    // display it — see `.contains("passphrase")` above).
-                    if !choice.contains("passphrase") {
+                    // Only a needs_passphrase choice carries a passphrase;
+                    // clear it for the others so a stale value from a
+                    // previous choice can't linger into the recipe.
+                    if !validate::needs_passphrase(choice) {
                         self.recipe.encryption.passphrase.clear();
                     }
                 }
-                Task::none()
+                self.check_fields()
             }
             Message::PassphraseChanged(p) => {
                 self.recipe.encryption.passphrase = p;
-                Task::none()
+                self.check_fields()
             }
             Message::TogglePassphraseVisible => {
                 self.passphrase_hidden = !self.passphrase_hidden;
@@ -672,23 +687,14 @@ impl TunaInstaller {
                     return;
                 }
             };
-            // 0600 under XDG_RUNTIME_DIR — the recipe may hold a passphrase.
-            let path = match offline::write_recipe(&json) {
-                Ok(path) => path,
-                Err(e) => {
-                    let _ = output.send(Message::InstallFinished(Err(e.to_string()))).await;
-                    return;
-                }
-            };
-
-            // flatpak-spawn --host bash -c 'pkexec /usr/local/bin/fisherman
-            // "$1"' in Flatpak, sudo /usr/local/bin/fisherman otherwise.
-            let mut cmd = offline::fisherman_command();
-            cmd.push(path.display().to_string());
-            let mut child = match spawn_wrapper(&cmd) {
+            // flatpak-spawn --host bash -c 'pkexec /usr/local/bin/fisherman -'
+            // in Flatpak, sudo /usr/local/bin/fisherman - otherwise. The
+            // recipe goes to the wrapper's stdin, never to a file: it may
+            // hold a passphrase (tuna-os/fisherman#276).
+            let cmd = offline::fisherman_command();
+            let mut child = match spawn_wrapper(&cmd, json.into_bytes()).await {
                 Ok(child) => child,
                 Err(e) => {
-                    let _ = std::fs::remove_file(&path);
                     let _ = output
                         .send(Message::InstallFinished(Err(format!(
                             "Failed to run fisherman: {e}"
@@ -713,12 +719,10 @@ impl TunaInstaller {
             let code = match child.wait().await {
                 Ok(status) => status.code().unwrap_or(-1),
                 Err(e) => {
-                    let _ = std::fs::remove_file(&path);
                     let _ = output.send(Message::InstallFinished(Err(e.to_string()))).await;
                     return;
                 }
             };
-            let _ = std::fs::remove_file(&path);
             if code != 0 {
                 tracing::error!("fisherman exited with code {code}");
             }
@@ -728,20 +732,29 @@ impl TunaInstaller {
 }
 
 /// Start fisherman's wrapper with piped output, as the leader of its own
-/// process group.
+/// process group, and hand it `stdin_data` (the recipe) on stdin, closed
+/// after: fisherman reads to EOF.
 ///
 /// The wrapper is the only process of the install this user can signal;
 /// fisherman runs as root and cancels when its parent dies
 /// (tuna-os/fisherman#267). The shared contract is "kill your wrapper's
 /// process group", which must never be the installer's own group. This
 /// frontend has no cancel UI, so nothing signals it yet.
-fn spawn_wrapper(argv: &[String]) -> std::io::Result<tokio::process::Child> {
-    TokioCommand::new(&argv[0])
+async fn spawn_wrapper(argv: &[String], stdin_data: Vec<u8>) -> std::io::Result<tokio::process::Child> {
+    use tokio::io::AsyncWriteExt;
+    let mut child = TokioCommand::new(&argv[0])
         .args(&argv[1..])
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .process_group(0)
-        .spawn()
+        .spawn()?;
+    if let Some(mut stdin) = child.stdin.take() {
+        // A wrapper that is already gone says why through its exit code.
+        let _ = stdin.write_all(&stdin_data).await;
+        let _ = stdin.shutdown().await;
+    }
+    Ok(child)
 }
 
 /// Every line from a child's stdout and stderr, read concurrently.
@@ -781,10 +794,6 @@ where
 mod tests {
     #[test]
     fn override_makes_all_four_choices_available() {
-        use std::sync::Mutex;
-        static ENV_LOCK: Mutex<()> = Mutex::new(());
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-
         assert_eq!(super::available_encryption_choices(false).len(), 2);
         assert_eq!(super::available_encryption_choices(true).len(), 4);
     }
@@ -819,7 +828,7 @@ mod tests {
     fn encryption_choices_filtering() {
         let without_tpm = available_encryption_choices(false);
         assert_eq!(without_tpm.len(), 2);
-        assert!(without_tpm.iter().all(|c| !c.starts_with("tpm2")));
+        assert!(without_tpm.iter().all(|c| !validate::needs_tpm2(c)));
         assert_eq!(without_tpm[0], "none");
         assert_eq!(without_tpm[1], "luks-passphrase");
 
@@ -852,8 +861,9 @@ mod tests {
     fn wrapper_leads_its_own_process_group() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            let mut child =
-                super::spawn_wrapper(&["sleep".to_string(), "30".to_string()]).expect("sleep");
+            let mut child = super::spawn_wrapper(&["sleep".to_string(), "30".to_string()], Vec::new())
+                .await
+                .expect("sleep");
             let pid = child.id().unwrap();
             assert_eq!(pgrp_of(&pid.to_string()), pid, "the wrapper is not a group leader");
             assert_ne!(pgrp_of(&pid.to_string()), pgrp_of("self"));
@@ -867,6 +877,65 @@ mod tests {
             use std::os::unix::process::ExitStatusExt;
             assert_eq!(status.signal(), Some(15));
         });
+    }
+
+    /// fisherman reads the recipe on stdin (`fisherman -`): what the wrapper
+    /// gets on stdin is the recipe, and stdin is closed so fisherman's read
+    /// to EOF ends.
+    #[test]
+    fn the_recipe_goes_to_the_wrappers_stdin() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let mut recipe = Recipe::default();
+            recipe.encryption.enc_type = "luks-passphrase".into();
+            recipe.encryption.passphrase = "s3cret".into();
+            let json = serde_json::to_string(&recipe).unwrap();
+            let child = super::spawn_wrapper(&["cat".to_string()], json.clone().into_bytes())
+                .await
+                .expect("cat");
+            let out = child.wait_with_output().await.unwrap();
+            assert!(out.status.success());
+            assert_eq!(String::from_utf8_lossy(&out.stdout), json);
+            assert_eq!(super::offline::fisherman_command().last().map(String::as_str), Some("-"));
+        });
+    }
+
+    /// The options page asks fisherman, and only its answer blocks Continue.
+    #[test]
+    fn the_partial_recipe_and_its_problems() {
+        let r = Recipe {
+            hostname: "my_pc".into(),
+            encryption: crate::model::Encryption {
+                enc_type: "tpm2-luks".into(),
+                passphrase: "stale".into(),
+            },
+            ..Recipe::default()
+        };
+        let problems = vec![validate::Problem {
+            field: "encryption.passphrase".into(),
+            code: "encryption_passphrase_required".into(),
+            message: "m".into(),
+        }];
+        // Only the fields the page has; a passphrase only for a type that
+        // takes one.
+        let partial = super::partial_recipe(&r);
+        assert_eq!(
+            partial,
+            serde_json::json!({
+                "hostname": "my_pc", "filesystem": "xfs",
+                "btrfsSubvolumes": false, "encryption": {"type": "tpm2-luks"},
+            })
+        );
+        let mut with_passphrase = r.clone();
+        with_passphrase.encryption.enc_type = "tpm2-luks-passphrase".into();
+        assert_eq!(super::partial_recipe(&with_passphrase)["encryption"]["passphrase"], "stale");
+        let enc_problem = problems.iter().find(|p| p.field.starts_with("encryption."));
+        assert!(enc_problem.is_some());
+        assert_eq!(
+            enc_problem.unwrap().render(),
+            branding::get().text("validate_encryption_passphrase_required")
+        );
+        assert_eq!(partial["encryption"].get("passphrase"), None);
     }
 
     /// A child that writes more than a pipe buffer to stderr before it

@@ -30,7 +30,6 @@ from bootc_installer.utils.fisherman_session import FishermanSession
 logger = logging.getLogger("Installer::Progress")
 
 _IN_FLATPAK = fisherman_runner.IN_FLATPAK
-_LIVE_ISO = fisherman_runner.LIVE_ISO
 _RESOURCE_PREFIX = "/org/bootcinstaller/Installer"
 _ASSET_DIR = pathlib.Path(__file__).resolve().parent.parent / "assets"
 
@@ -86,23 +85,35 @@ def _load_demo_transcript(path=None) -> list:
         return []
 
 
-def _fisherman_argv_direct(recipe: str) -> list:
+def _use_sudo() -> bool:
+    """sudo, not pkexec, on live media outside a Flatpak: the live user has
+    passwordless sudo and may have no polkit agent. Live media is fisherman's
+    answer (probe's live.is_live). This used to be /run/ostree-booted, which
+    every installed ostree host has, so every bootc desktop took the sudo
+    path."""
+    if _IN_FLATPAK:
+        return False
+    from bootc_installer.core.system import Systeminfo
+    return Systeminfo.is_live()
+
+
+def _fisherman_argv_direct() -> list:
     """Build an argv that captures fisherman stdout+stderr into the log file.
 
     For Flatpak: run bash on the HOST via flatpak-spawn so the shell redirect
     happens where fisherman actually runs. If we redirect inside the sandbox,
     flatpak-spawn's D-Bus proxy doesn't forward the host process stdout back
     through the redirect — the log file stays empty even though fisherman runs.
+    The recipe goes to the wrapper's stdin (`fisherman -`).
 
     Kept as a thin wrapper (rather than removed) so existing unit tests that
-    exercise this module's flatpak/live-ISO/native argv branches keep working
-    unchanged; FishermanSession.launch() calls fisherman_runner.build_argv()
-    directly via the same code path.
+    exercise this module's flatpak/live/native argv branches keep working;
+    FishermanSession.launch() calls fisherman_runner.build_argv() directly via
+    the same code path.
     """
     return fisherman_runner.build_argv(
-        recipe,
         in_flatpak=_IN_FLATPAK,
-        live_iso=_LIVE_ISO,
+        use_sudo=_use_sudo(),
         host_path=_FISHERMAN_HOST_PATH,
         log_path=_FISHERMAN_LOG_PATH,
     )
@@ -575,9 +586,6 @@ class BootcProgress(Gtk.Box):
         self.__stop_elapsed_timer()
         self.__cancel_video_fallback_timeout()
         self.__pause_install_video()
-        # Securely delete the recipe file — it contains plaintext passphrases
-        # and passwords that must not persist on disk after install.
-        self.__session.cleanup_recipe_file()
         self.__cleanup_video_tmp()
         self.__window.set_installation_result(
             ret == 0, None, self.__boot_id, self.__recovery_key, elapsed_secs
@@ -690,13 +698,13 @@ class BootcProgress(Gtk.Box):
             self.__window.set_installation_result(False, None)
             return
 
-        # FishermanSession owns staging, argv construction, launch, log
-        # tailing, and recipe cleanup — everything about running the
-        # privileged helper that is not GTK widget state.
+        # FishermanSession owns staging, argv construction, launch, handing
+        # over the recipe on stdin and log tailing — everything about running
+        # the privileged helper that is not GTK widget state.
         self.__session = FishermanSession(
             recipe,
             in_flatpak=_IN_FLATPAK,
-            live_iso=_LIVE_ISO,
+            use_sudo=_use_sudo(),
             stage_base=_FISHERMAN_STAGE_BASE,
             cache_dir=_FISHERMAN_CACHE_DIR,
             host_path=_FISHERMAN_HOST_PATH,
@@ -734,4 +742,3 @@ class BootcProgress(Gtk.Box):
         if self.__session is None:
             return
         self.__session.terminate()
-        self.__session.cleanup_recipe_file()

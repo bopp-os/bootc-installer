@@ -73,8 +73,27 @@ regenerate the sources file in the same commit.
 
 ## Layout
 
-`src/main.rs` (app + update loop), `ui.rs` (screens), `offline.rs`,
-`readiness.rs`, `branding.rs`, `capture.rs` (the screenshot harness entry point).
+`src/main.rs` (app + update loop), `ui.rs` (screens), `offline.rs` (the
+fisherman wrapper and host commands), `validate.rs` (`fisherman validate`
+and the encryption choices), `readiness.rs`, `branding.rs`, `capture.rs`
+(the screenshot harness entry point).
+
+## The recipe, live media and validation
+
+- The recipe goes to `fisherman -` on stdin (`spawn_wrapper`); nothing
+  writes it to a file. It holds the LUKS passphrase.
+- Live media is the probe's `live.is_live` (`apply_probe`): then `image`
+  is left out and fisherman installs the running system.
+  `additionalImageStores` stays empty: fisherman exposes the host's stores.
+- The hostname, filesystem and encryption rules are fisherman's: the
+  options page sends them to `fisherman validate --json --partial -` after
+  a pause (`check_fields`), shows a problem through the copy key
+  `validate_<code>` and holds Continue on it.
+- Encryption choices are `src/encryption-choices.json`, fisherman's file
+  byte for byte, compiled in (`validate::choices`). Branch on
+  `needs_passphrase` / `needs_tpm2`, never on the type's name.
+
+`../../shared/recipe/README.md` is the contract.
 
 Every user-facing string lives in `ui::copy`. The views and `ui::page_text`
 both read from it, and the capture harness writes `page_text` to

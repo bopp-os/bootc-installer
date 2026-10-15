@@ -1,8 +1,14 @@
 #ifndef OFFLINE_H
 #define OFFLINE_H
 
-// Offline-install and sandbox plumbing shared by the wizard pages.
-// Contract: ../../INSTALLER-FRONTENDS.md §3 (privileges) and §4 (offline).
+// Sandbox plumbing: how the wizard reaches fisherman and the host.
+// Contract: ../../INSTALLER-FRONTENDS.md §3 (privileges).
+//
+// Live media and offline image stores are fisherman's facts now (probe's
+// `live` and `offline`, probe.h). This file used to find them itself:
+// `bootc status` plus /run/ostree-live and /proc/cmdline for live media, and
+// $TUNA_OFFLINE_STORES and /etc/tuna-installer/offline-stores for the
+// stores. Inside a Flatpak those paths are the runtime's, not the host's.
 
 #include <QString>
 #include <QStringList>
@@ -15,10 +21,11 @@ namespace offline {
 // True when running inside a Flatpak sandbox.
 bool inFlatpak();
 
-// Command (program + leading args) that runs fisherman with privileges;
-// the caller appends the recipe path. Inside Flatpak:
-// flatpak-spawn --host bash -c 'pkexec /usr/local/bin/fisherman "$1"; exit $?' --
-// Outside: sudo /usr/local/bin/fisherman.
+// Command (program + args) that runs fisherman with privileges, reading the
+// recipe from stdin (`fisherman -`): the caller writes the JSON to the
+// process's stdin and closes it. Inside Flatpak:
+// flatpak-spawn --host bash -c 'pkexec /usr/local/bin/fisherman -; exit $?'
+// Outside: sudo /usr/local/bin/fisherman -.
 QStringList fishermanCommand();
 // The same, for an explicit sandbox state (tests).
 QStringList fishermanCommand(bool flatpak);
@@ -31,13 +38,6 @@ void startInOwnProcessGroup(QProcess &process);
 
 // Wrap argv so it executes on the host when sandboxed (flatpak-spawn --host).
 QStringList hostCommand(const QStringList &argv);
-
-// Image ref of the booted live system, or empty when not on live media.
-// Non-empty means the recipe may omit `image` (bootc installs the running container).
-QString liveIsoImage();
-
-// Embedded OCI store roots present on this medium (§4B conventions).
-QStringList offlineStores();
 
 } // namespace offline
 

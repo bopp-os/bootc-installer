@@ -307,24 +307,8 @@ class TestResolveFishermanPath:
         monkeypatch.setattr(os.path, "exists", lambda p: p == "/usr/bin/fisherman")
         assert self._resolve(SimpleNamespace()) == "/usr/bin/fisherman"
 
-    def test_non_flatpak_live_iso_fallback(self, monkeypatch):
-        monkeypatch.setattr(slurp, "_IN_FLATPAK", False)
-        monkeypatch.setattr(slurp, "_LIVE_ISO", True)
-        monkeypatch.delenv("BOOTC_FISHERMAN_PATH", raising=False)
-        calls = {"n": 0}
-
-        def fake_exists(p):
-            if p != "/usr/local/bin/fisherman":
-                return False
-            calls["n"] += 1
-            return calls["n"] > 1  # absent during the candidate loop, present on recheck
-
-        monkeypatch.setattr(os.path, "exists", fake_exists)
-        assert self._resolve(SimpleNamespace()) == "/usr/local/bin/fisherman"
-
     def test_non_flatpak_none_found(self, monkeypatch):
         monkeypatch.setattr(slurp, "_IN_FLATPAK", False)
-        monkeypatch.setattr(slurp, "_LIVE_ISO", False)
         monkeypatch.delenv("BOOTC_FISHERMAN_PATH", raising=False)
         monkeypatch.setattr(os.path, "exists", lambda p: False)
         assert self._resolve(SimpleNamespace()) is None

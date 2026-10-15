@@ -14,6 +14,7 @@ the confirm pages did not: KDE said "None" and "Passphrase (LUKS)", GNOME
 "Encrypted with passphrase", and COSMIC, Niri and Xfce printed the raw id.
 """
 
+import json
 import re
 import unittest
 
@@ -25,13 +26,32 @@ from tests.unit.test_copy_coverage import (
 # Where each frontend's encryption page gets its ids: (file, the text that
 # opens the list). Every quoted string between it and the closing bracket
 # is an id, in display order.
-CHOICE_LISTS = {
-    "xfce": ("frontends/xfce/tuna_installer_xfce/pages.py", "ENCRYPTION_TYPES = ("),
-    "cosmic": ("frontends/cosmic/src/main.rs", "pub const ENCRYPTION_TYPES: [&str; 4] = ["),
-    "kde": ("frontends/kde/src/recipe.cpp", "static const QStringList types = {"),
-    "niri": ("frontends/niri/ui/installer.qml", "readonly property var encryptionTypes: ["),
-}
+# Empty since every frontend with a list reads fisherman's file instead
+# (LOADS_THE_FILE); kept so a frontend that brings a literal list back is
+# held to the order.
+CHOICE_LISTS = {}
 CLOSERS = {"(": ")", "[": "]", "{": "}"}
+
+# The frontends that read their copy of encryption-choices.json instead of
+# keeping a list: (file, the text that shows it reads the copy). Their order
+# and their passphrase / TPM logic are then the file's.
+LOADS_THE_FILE = {
+    "kde": [("frontends/kde/CMakeLists.txt", 'encryption-choices.json" TUNA_ENCRYPTION_CHOICES_JSON'),
+            ("frontends/kde/src/recipe.cpp", '#include "encryption_choices.h"')],
+    "xfce": [("frontends/xfce/tuna_installer_xfce/core.py",
+              "fisherman_validate.load_choices()")],
+    "cosmic": [("frontends/cosmic/src/validate.rs", 'include_str!("encryption-choices.json")'),
+               ("frontends/cosmic/src/main.rs", "validate::choices()")],
+    "niri": [("frontends/niri/installer/validate.go", "//go:embed encryption-choices.json"),
+             ("frontends/niri/installer/main.go", '"encryptionChoices": encryptionChoices()'),
+             ("frontends/niri/ui/installer.qml", "root.encryptionChoices = facts.encryptionChoices")],
+}
+# What logic on the type's name looked like before the file had
+# needs_passphrase and needs_tpm2.
+NAME_LOGIC = re.compile(
+    r"""["']passphrase["']\s+in\b|contains\(\s*"passphrase"|endsWith\(\s*(?:QLatin1String\()?"passphrase"|"""
+    r"""HasSuffix\([^)]*"passphrase"|startswith\(\s*["']tpm2|startsWith\(\s*(?:QLatin1String\()?"tpm2"|"""
+    r"""HasPrefix\([^)]*["]tpm2""" + '"')
 
 # The defaults' distinctive words, and the confirm-page labels that drifted
 # from them. "Passphrase" and "TPM" alone are left out: every frontend
@@ -79,6 +99,46 @@ def frontend_code(frontend):
         yield path, strip_comments(text, COMMENT_MARKERS[path.suffix])
 
 
+# fisherman's table of encryption types (data/encryption-choices.json,
+# generated from recipe.EncryptionChoices), copied byte for byte. The
+# frontends that build from their own directory carry a further copy each.
+CHOICES = REPO / "shared" / "recipe" / "encryption-choices.json"
+CHOICES_UPSTREAM = REPO / "fisherman" / "data" / "encryption-choices.json"
+CHOICES_COPIES = {
+    "kde": REPO / "frontends" / "kde" / "encryption-choices.json",
+    "cosmic": REPO / "frontends" / "cosmic" / "src" / "encryption-choices.json",
+    "niri": REPO / "frontends" / "niri" / "installer" / "encryption-choices.json",
+    "xfce": REPO / "frontends" / "xfce" / "tuna_installer_xfce" / "encryption-choices.json",
+}
+
+
+def choice_types():
+    return [c["type"] for c in json.loads(CHOICES.read_text())["choices"]]
+
+
+class TheChoicesFileIsFishermans(unittest.TestCase):
+    def test_shared_copy_is_byte_identical_to_the_submodule(self):
+        if not CHOICES_UPSTREAM.exists():
+            self.skipTest("fisherman submodule not checked out")
+        self.assertEqual(
+            CHOICES.read_bytes(), CHOICES_UPSTREAM.read_bytes(),
+            "shared/recipe/encryption-choices.json drifted from fisherman's "
+            "data/encryption-choices.json; copy it again after a submodule bump")
+
+    def test_frontend_copies_are_byte_identical(self):
+        for frontend, path in CHOICES_COPIES.items():
+            with self.subTest(frontend=frontend):
+                self.assertEqual(path.read_bytes(), CHOICES.read_bytes(),
+                                 f"{path.relative_to(REPO)} drifted from {CHOICES.relative_to(REPO)}")
+
+    def test_the_file_is_the_schema_enum_in_order(self):
+        self.assertEqual(choice_types(), encryption_types())
+
+    def test_every_choice_names_its_copy_key(self):
+        for c in json.loads(CHOICES.read_text())["choices"]:
+            self.assertEqual(c["copy_key"], encryption_key(c["type"], ""))
+
+
 class EveryFrontendOffersTheSchemaTypes(unittest.TestCase):
     def test_the_schema_lists_the_four_types(self):
         self.assertEqual(encryption_types(),
@@ -113,7 +173,7 @@ class EveryFrontendOffersTheSchemaTypes(unittest.TestCase):
         # out: GNOME's done page searches the log for it.)
         allowed = set(encryption_types())
         pattern = re.compile(r'"(luks-[a-z0-9-]+|tpm2-luks[a-z0-9-]*)"')
-        for frontend in ("gnome", *CHOICE_LISTS):
+        for frontend in ("gnome", *LOADS_THE_FILE, *CHOICE_LISTS):
             for path, code in frontend_code(frontend):
                 for literal in pattern.findall(code):
                     self.assertIn(literal, allowed, f"{path.relative_to(REPO)}: {literal!r}")
@@ -121,7 +181,7 @@ class EveryFrontendOffersTheSchemaTypes(unittest.TestCase):
 
 class NoFrontendCarriesItsOwnWords(unittest.TestCase):
     def test_no_choice_label_or_description_is_hardcoded(self):
-        for frontend in ("gnome", *CHOICE_LISTS):
+        for frontend in ("gnome", *LOADS_THE_FILE, *CHOICE_LISTS):
             for path, code in frontend_code(frontend):
                 for line in NOT_IN_FRONTEND_SOURCE:
                     for quoted in (f'"{line}"', f"'{line}'"):
@@ -136,6 +196,28 @@ class NoFrontendCarriesItsOwnWords(unittest.TestCase):
             with self.subTest(frontend=frontend):
                 code = "\n".join(c for _, c in frontend_code(frontend))
                 self.assertFalse(raw in code, f"{frontend} prints {raw}")
+
+
+class FrontendsReadTheFile(unittest.TestCase):
+    def test_each_reads_its_copy(self):
+        for frontend, markers in LOADS_THE_FILE.items():
+            for path, marker in markers:
+                with self.subTest(frontend=frontend, path=path):
+                    self.assertIn(marker, (REPO / path).read_text())
+
+    def test_no_frontend_that_reads_the_file_keeps_a_list(self):
+        for frontend in LOADS_THE_FILE:
+            for path, code in frontend_code(frontend):
+                with self.subTest(path=str(path.relative_to(REPO))):
+                    self.assertNotIn('"tpm2-luks-passphrase"', code)
+
+    def test_no_frontend_decides_by_the_types_name(self):
+        """needs_passphrase and needs_tpm2 come from the file. A frontend
+        that tests the name for "passphrase" or "tpm2" re-implements them."""
+        for frontend in LOADS_THE_FILE:
+            for path, code in frontend_code(frontend):
+                with self.subTest(path=str(path.relative_to(REPO))):
+                    self.assertIsNone(NAME_LOGIC.search(code))
 
 
 class TheParserReadsRealLists(unittest.TestCase):

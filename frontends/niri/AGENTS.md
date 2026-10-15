@@ -32,7 +32,8 @@ The QML talks to the backend through its CLI, not a library:
 cd installer
 go build -o tuna-installer-niri .
 ./tuna-installer-niri discover-disks        # renders `fisherman probe --json` disks
-./tuna-installer-niri install '{...}'       # runs fisherman with a JSON recipe
+./tuna-installer-niri install < recipe.json # pipes the recipe on to `fisherman -`
+./tuna-installer-niri validate < page.json  # `fisherman validate --json --partial -`
 quickshell ui/installer.qml                 # the frontend, needs Quickshell
 ```
 
@@ -84,6 +85,22 @@ given. Do not add a disk filter or a size formatter. If the probe fails,
 `discover-disks` exits 1 with the reason on stderr, and the disk page shows
 it. `go test -run TestProbe` renders the shared fixtures, and
 `../../shared/probe/README.md` is the contract.
+
+## The recipe, live media and validation
+
+- `install` reads the recipe on stdin and pipes it on to `fisherman -`;
+  nothing writes it to a file. It holds the LUKS passphrase.
+- `detect` reports the probe's live media (`isLive`, `liveImage`) and
+  offline images, and the embedded `encryption-choices.json`
+  (`encryptionChoices`). The QML sends an empty `image` only when `isLive`,
+  and never `additionalImageStores`: fisherman exposes the host's stores.
+- The hostname, filesystem and encryption rules are fisherman's:
+  `validate` hands the QML's partial recipe to
+  `fisherman validate --json --partial -`. The QML shows a problem through
+  the copy key `validate_<code>` and holds Continue and Install on it.
+  Branch on `needs_passphrase` / `needs_tpm2`, never on the type's name.
+
+`../../shared/recipe/README.md` is the contract.
 
 ## Sibling contract
 

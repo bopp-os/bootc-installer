@@ -42,10 +42,11 @@ class TestFishermanArgvDirect(unittest.TestCase):
                 importlib.reload(mod)
             cls.mod = mod
 
-    def _fn(self, in_flatpak: bool, live_iso: bool):
+    def _argv(self, in_flatpak: bool, live: bool):
+        """The argv for a host that fisherman's probe calls live or not."""
         self.mod._IN_FLATPAK = in_flatpak
-        self.mod._LIVE_ISO = live_iso
-        return self.mod._fisherman_argv_direct
+        with patch("bootc_installer.core.system.Systeminfo.is_live", return_value=live):
+            return self.mod._fisherman_argv_direct()
 
     def _script(self, argv: list) -> str:
         """Return the shell script string from an argv (element after '-c')."""
@@ -53,66 +54,62 @@ class TestFishermanArgvDirect(unittest.TestCase):
         return argv[idx + 1]
 
     def test_returns_list_of_strings(self):
-        fn = self._fn(False, False)
-        argv = fn("/tmp/recipe.json")
+        argv = self._argv(False, False)
         self.assertIsInstance(argv, list)
         self.assertTrue(all(isinstance(a, str) for a in argv))
 
-    def test_recipe_is_last_arg(self):
-        """The recipe path is always the last element (bash positional $1)."""
-        fn = self._fn(False, False)
-        argv = fn("/tmp/recipe.json")
-        self.assertEqual(argv[-1], "/tmp/recipe.json")
+    def test_the_recipe_is_read_from_stdin(self):
+        """fisherman reads the recipe from stdin (`fisherman -`): no path is
+        passed, so no recipe file can exist to be passed."""
+        for flatpak, live in ((False, False), (False, True), (True, False)):
+            with self.subTest(flatpak=flatpak, live=live):
+                argv = self._argv(flatpak, live)
+                self.assertEqual(argv[-2], "-c")
+                self.assertRegex(self._script(argv), r'fisherman"? - >')
+                self.assertNotIn(".json", " ".join(argv))
 
     def test_flatpak_normal_runs_bash_on_host(self):
         """Flatpak: bash must run on the HOST so the log redirect works."""
-        fn = self._fn(in_flatpak=True, live_iso=False)
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("BOOTC_TEST", None)
-            argv = fn("/tmp/recipe.json")
+            argv = self._argv(in_flatpak=True, live=False)
         self.assertEqual(argv[0], "flatpak-spawn")
         self.assertIn("--host", argv)
         self.assertIn("bash", argv)
         script = self._script(argv)
         self.assertIn("pkexec", script)
         self.assertNotIn("flatpak-spawn", script)
-        self.assertEqual(argv[-1], "/tmp/recipe.json")
 
     def test_flatpak_bootc_test(self):
         """BOOTC_TEST env: uses sudo with custom fisherman path on the host."""
-        fn = self._fn(in_flatpak=True, live_iso=False)
         with patch.dict(os.environ, {"BOOTC_TEST": "1", "BOOTC_FISHERMAN_PATH": "/custom/fisherman"}):
-            argv = fn("/tmp/recipe.json")
+            argv = self._argv(in_flatpak=True, live=False)
         self.assertEqual(argv[0], "flatpak-spawn")
         self.assertIn("--host", argv)
         script = self._script(argv)
         self.assertIn("sudo", script)
         self.assertIn("/custom/fisherman", script)
         self.assertNotIn("flatpak-spawn", script)
-        self.assertEqual(argv[-1], "/tmp/recipe.json")
 
-    def test_live_iso(self):
-        fn = self._fn(in_flatpak=False, live_iso=True)
-        argv = fn("/tmp/recipe.json")
+    def test_live_media_uses_sudo(self):
+        argv = self._argv(in_flatpak=False, live=True)
         self.assertEqual(argv[0], "bash")
         script = self._script(argv)
         self.assertIn("sudo", script)
         self.assertIn("/usr/local/bin/fisherman", script)
-        self.assertEqual(argv[-1], "/tmp/recipe.json")
 
-    def test_native(self):
-        fn = self._fn(in_flatpak=False, live_iso=False)
-        argv = fn("/tmp/recipe.json")
+    def test_an_installed_host_uses_pkexec(self):
+        """An installed bootc desktop is not live media, whatever
+        /run/ostree-booted says: that file is on every ostree host."""
+        argv = self._argv(in_flatpak=False, live=False)
         self.assertEqual(argv[0], "bash")
         script = self._script(argv)
         self.assertIn("pkexec", script)
         self.assertIn("/usr/local/bin/fisherman", script)
-        self.assertEqual(argv[-1], "/tmp/recipe.json")
 
     def test_log_file_redirected_in_script(self):
         """The shell script must redirect output to the log file."""
-        fn = self._fn(False, False)
-        argv = fn("/tmp/recipe.json")
+        argv = self._argv(False, False)
         script = self._script(argv)
         self.assertIn(">", script)
         self.assertIn(self.mod._FISHERMAN_LOG_PATH, script)

@@ -1,17 +1,25 @@
-//! Offline-install and sandbox plumbing.
-//! Contract: ../../INSTALLER-FRONTENDS.md §3 (privileges) and §4 (offline).
+//! Sandbox plumbing: how this frontend reaches fisherman and the host.
+//! Contract: ../../INSTALLER-FRONTENDS.md §3 (privileges).
+//!
+//! Live media and offline image stores are fisherman's facts now (probe's
+//! `live` and `offline`, probe.rs). This module used to find them itself:
+//! `bootc status` plus /run/ostree-live and /proc/cmdline for live media,
+//! and $TUNA_OFFLINE_STORES and /etc/tuna-installer/offline-stores for the
+//! stores. Inside a Flatpak those paths are the runtime's, not the host's.
+//! It also wrote the recipe to a 0600 temp file; fisherman now reads it on
+//! stdin (`fisherman -`).
 
-use std::collections::HashSet;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
-use std::process::Command;
 
 pub fn in_flatpak() -> bool {
     Path::new("/.flatpak-info").exists()
 }
 
-/// Program + leading args that run fisherman with privileges; the caller
-/// appends the recipe path.
+/// Program + args that run fisherman with privileges. fisherman reads the
+/// recipe from stdin (`-`, tuna-os/fisherman#276): the caller writes the
+/// JSON to the wrapper's stdin and closes it, so no file holds the
+/// passphrase.
 ///
 /// Flatpak runtimes ship no pkexec; escalate host-side. The live ISO
 /// symlinks the flatpak-bundled fisherman to /usr/local/bin and installs
@@ -26,10 +34,8 @@ pub fn fisherman_command() -> Vec<String> {
 /// from `flatpak-spawn --host pkexec ...`. fisherman runs as root, so this
 /// process can never signal it; it cancels when its PARENT dies
 /// (tuna-os/fisherman#267). Launched directly, that parent was the host's
-/// flatpak-session-helper, which nothing here can kill. The appended recipe
-/// path becomes bash's `$1` (after `--`) and is never part of the script
-/// text. No redirection: stdout and stderr still come back through
-/// flatpak-spawn's pipes.
+/// flatpak-session-helper, which nothing here can kill. No redirection:
+/// stdin, stdout and stderr all pass through flatpak-spawn.
 pub fn fisherman_command_for(flatpak: bool) -> Vec<String> {
     if flatpak {
         vec![
@@ -37,11 +43,10 @@ pub fn fisherman_command_for(flatpak: bool) -> Vec<String> {
             "--host".into(),
             "bash".into(),
             "-c".into(),
-            r#"pkexec /usr/local/bin/fisherman "$1"; exit $?"#.into(),
-            "--".into(),
+            "pkexec /usr/local/bin/fisherman -; exit $?".into(),
         ]
     } else {
-        vec!["sudo".into(), "/usr/local/bin/fisherman".into()]
+        vec!["sudo".into(), "/usr/local/bin/fisherman".into(), "-".into()]
     }
 }
 
@@ -56,28 +61,8 @@ pub fn host_command(argv: &[&str]) -> Vec<String> {
     cmd
 }
 
-fn run_host(argv: &[&str]) -> Option<String> {
-    let cmd = host_command(argv);
-    let out = match Command::new(&cmd[0]).args(&cmd[1..]).output() {
-        Ok(out) => out,
-        Err(e) => {
-            tracing::warn!("run_host {argv:?} failed to spawn: {e}");
-            return None;
-        }
-    };
-    if !out.status.success() {
-        tracing::warn!(
-            "run_host {argv:?} exited with {}: {}",
-            out.status,
-            String::from_utf8_lossy(&out.stderr).trim()
-        );
-        return None;
-    }
-    Some(String::from_utf8_lossy(&out.stdout).into_owned())
-}
-
-/// Best-effort persistence of the fisherman install log, 0600 like the
-/// recipe file, so a failed install can be diagnosed after the wizard
+/// Best-effort persistence of the fisherman install log, 0600 (it can hold
+/// the recovery key), so a failed install can be diagnosed after the wizard
 /// closes. Never fails the install: logging the log is not worth failing
 /// the install over.
 pub fn persist_install_log(log: &str) {
@@ -104,67 +89,6 @@ pub fn persist_install_log(log: &str) {
     if let Err(e) = write() {
         tracing::warn!("could not persist install log to {}: {e}", path.display());
     }
-}
-
-/// Image ref of the booted live system, or None when not on live media.
-/// Some(_) means the recipe may omit `image` (bootc installs the running container).
-pub fn live_iso_image() -> Option<String> {
-    let out = run_host(&["bootc", "status", "--json"])?;
-    let status: serde_json::Value = serde_json::from_str(&out).ok()?;
-    let img = status["status"]["booted"]["image"]["image"]["image"].as_str()?;
-    if img.is_empty() {
-        return None;
-    }
-    let live = Path::new("/run/ostree-live").exists()
-        || std::fs::read_to_string("/proc/cmdline")
-            .map(|c| c.contains("rd.live.image"))
-            .unwrap_or(false);
-    live.then(|| img.to_string())
-}
-
-/// Embedded OCI store roots present on this medium (§4B conventions).
-pub fn offline_stores() -> Vec<String> {
-    let mut stores: Vec<String> = Vec::new();
-    if let Ok(env) = std::env::var("TUNA_OFFLINE_STORES") {
-        stores.extend(env.split(':').map(str::to_string));
-    }
-    if let Ok(listing) = std::fs::read_to_string("/etc/tuna-installer/offline-stores") {
-        stores.extend(
-            listing
-                .lines()
-                .map(str::trim)
-                .filter(|l| !l.is_empty() && !l.starts_with('#'))
-                .map(str::to_string),
-        );
-    }
-    stores.push("/usr/share/tuna-installer/oci-store".into());
-    let mut seen = HashSet::new();
-    stores
-        .into_iter()
-        .filter(|s| seen.insert(s.clone()) && Path::new(s).is_dir())
-        .collect()
-}
-
-/// Write the recipe 0600 in a fresh private directory (it may hold secrets).
-///
-/// Uses NamedTempFile (O_EXCL + O_NOFOLLOW + 0600) in a directory under
-/// XDG_RUNTIME_DIR, falling back to the system temp dir. Never writes to a
-/// fixed path: this used to be `<base>/tuna-installer/recipe.json` opened
-/// with `create(true)`, which follows a pre-existing attacker symlink and
-/// silently ignores the 0600 mode for a pre-existing file — a local user
-/// could read the LUKS passphrase or swap the recipe root executes.
-pub fn write_recipe(json: &str) -> std::io::Result<std::path::PathBuf> {
-    use std::io::Write;
-    use tempfile::NamedTempFile;
-
-    let base = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into());
-    let mut f = NamedTempFile::new_in(base)?;
-    f.write_all(json.as_bytes())?;
-    // Keep the file after the TempFile is dropped; the caller removes it once
-    // fisherman has exited. The unpredictable 0600 name survives here, so no
-    // fixed path is ever handed to sudo/pkexec.
-    let (_, path) = f.keep()?;
-    Ok(path)
 }
 
 #[cfg(test)]
@@ -196,7 +120,7 @@ mod tests {
     fn fisherman_command_escalates_via_sudo_outside_flatpak() {
         assert_eq!(
             fisherman_command(),
-            vec!["sudo".to_string(), "/usr/local/bin/fisherman".to_string()]
+            vec!["sudo".to_string(), "/usr/local/bin/fisherman".to_string(), "-".to_string()]
         );
     }
 
@@ -211,133 +135,60 @@ mod tests {
                 "--host",
                 "bash",
                 "-c",
-                r#"pkexec /usr/local/bin/fisherman "$1"; exit $?"#,
-                "--",
+                "pkexec /usr/local/bin/fisherman -; exit $?",
             ]
         );
     }
 
     #[test]
-    fn flatpak_wrapper_passes_output_and_status_through() {
+    fn flatpak_wrapper_passes_stdin_output_and_status_through() {
         // The wrapper's bash for real (everything after `flatpak-spawn
-        // --host`), pkexec stubbed on PATH, and a recipe path a shell would
-        // act on if it were interpolated into the script.
+        // --host`), pkexec stubbed on PATH: what is written to the wrapper's
+        // stdin is what fisherman reads, and `-` is its only argument.
+        use std::io::Write;
         let dir = temp_workdir("wrapper");
         let bin = dir.join("bin");
         std::fs::create_dir_all(&bin).unwrap();
         let stub = bin.join("pkexec");
+        let seen = dir.join("stdin");
         use std::os::unix::fs::PermissionsExt;
         std::fs::write(
             &stub,
-            "#!/bin/sh\nprintf '%s|%s\\n' \"$1\" \"$2\"\necho to-stderr >&2\nexit 7\n",
+            format!(
+                "#!/bin/sh\nprintf '%s|%s\\n' \"$1\" \"$2\"\ncat > {}\necho to-stderr >&2\nexit 7\n",
+                seen.display()
+            ),
         )
         .unwrap();
         std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let recipe = dir.join("a b $(touch pwned) ;x.json");
-        let mut argv = fisherman_command_for(true);
-        argv.push(recipe.display().to_string());
+        let argv = fisherman_command_for(true);
         let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default());
-        let out = Command::new(&argv[2])
+        let mut child = std::process::Command::new(&argv[2])
             .args(&argv[3..])
             .env("PATH", path)
             .current_dir(&dir)
-            .output()
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
             .unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(br#"{"encryption":{"type":"luks-passphrase","passphrase":"s3cret"}}"#)
+            .unwrap();
+        let out = child.wait_with_output().unwrap();
         assert_eq!(out.status.code(), Some(7));
-        assert_eq!(
-            String::from_utf8_lossy(&out.stdout),
-            format!("/usr/local/bin/fisherman|{}\n", recipe.display())
-        );
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "/usr/local/bin/fisherman|-\n");
         assert_eq!(String::from_utf8_lossy(&out.stderr), "to-stderr\n");
-        assert!(!dir.join("pwned").exists());
+        assert!(std::fs::read_to_string(&seen).unwrap().contains("s3cret"));
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
     fn host_command_passes_through_outside_flatpak() {
         assert_eq!(host_command(&["bootc", "status"]), vec!["bootc".to_string(), "status".to_string()]);
         assert_eq!(host_command(&[]), Vec::<String>::new());
-    }
-
-    // ── offline store discovery ───────────────────────────────────────────────
-
-    #[test]
-    fn offline_stores_parses_env_filters_non_dirs_and_dedups() {
-        let dir = temp_workdir("stores");
-        let a = dir.join("store-a");
-        let b = dir.join("store-b");
-        let not_a_dir = dir.join("plain-file");
-        std::fs::create_dir_all(&a).unwrap();
-        std::fs::create_dir_all(&b).unwrap();
-        std::fs::write(&not_a_dir, "x").unwrap();
-
-        let value = format!("{}:{}:{}", a.display(), b.display(), not_a_dir.display());
-        // SAFETY: single-threaded test; unique value; same var not used elsewhere.
-        unsafe { std::env::set_var("TUNA_OFFLINE_STORES", &value) };
-        let stores = offline_stores();
-        unsafe { std::env::remove_var("TUNA_OFFLINE_STORES") };
-
-        assert!(stores.contains(&a.display().to_string()), "{stores:?}");
-        assert!(stores.contains(&b.display().to_string()), "{stores:?}");
-        assert!(!stores.contains(&not_a_dir.display().to_string()), "{stores:?}");
-        // The default store is not a directory in the test environment.
-        assert!(!stores.iter().any(|s| s == "/usr/share/tuna-installer/oci-store"), "{stores:?}");
-
-        let dup_value = format!("{}:{}", a.display(), a.display());
-        unsafe { std::env::set_var("TUNA_OFFLINE_STORES", &dup_value) };
-        let dedup = offline_stores();
-        unsafe { std::env::remove_var("TUNA_OFFLINE_STORES") };
-        assert_eq!(
-            dedup.iter().filter(|s| s.as_str() == a.display().to_string()).count(),
-            1,
-            "{dedup:?}"
-        );
-
-        std::fs::remove_dir_all(&dir).ok();
-    }
-
-    // ── recipe writing ────────────────────────────────────────────────────────
-
-    #[test]
-    fn write_recipe_creates_0600_unpredictable_file() {
-        use std::os::unix::fs::PermissionsExt;
-
-        let dir = temp_workdir("recipe");
-        // SAFETY: single-threaded test; XDG_RUNTIME_DIR is read immediately after.
-        unsafe { std::env::set_var("XDG_RUNTIME_DIR", &dir) };
-
-        let path = write_recipe("{\"v\":1}").unwrap();
-        assert!(path.starts_with(&dir));
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), "{\"v\":1}");
-        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
-        assert_eq!(mode, 0o600, "recipe must be 0600 (may hold secrets)");
-
-        // Every write gets a fresh unpredictable path — never the fixed
-        // `<base>/tuna-installer/recipe.json` that a local user could
-        // pre-create, symlink, or read before chmod (gh-39).
-        let path2 = write_recipe("{\"v\":2}").unwrap();
-        assert_ne!(path, path2, "recipe path must not be a fixed constant");
-        assert_eq!(std::fs::read_to_string(&path2).unwrap(), "{\"v\":2}");
-        let mode = std::fs::metadata(&path2).unwrap().permissions().mode() & 0o777;
-        assert_eq!(mode, 0o600);
-        let name = path2.file_name().unwrap().to_string_lossy();
-        assert!(
-            !name.contains("recipe.json") || name.len() > 11,
-            "file name must be unpredictable, got {name}"
-        );
-
-        unsafe { std::env::remove_var("XDG_RUNTIME_DIR") };
-        std::fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn write_recipe_falls_back_to_tmp_without_runtime_dir() {
-        use std::os::unix::fs::PermissionsExt;
-        // SAFETY: single-threaded test.
-        unsafe { std::env::remove_var("XDG_RUNTIME_DIR") };
-        let path = write_recipe("{}").unwrap();
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), "{}");
-        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
-        assert_eq!(mode, 0o600);
-        let _ = std::fs::remove_file(&path);
     }
 }

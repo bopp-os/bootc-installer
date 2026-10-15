@@ -13,6 +13,7 @@ sources = [
   'phone_companion.py',
   'fisherman_runner.py',
   'fisherman_session.py',
+  'field_check.py',
   'branding.py',
   'copy.py',
   'sha512crypt.py',

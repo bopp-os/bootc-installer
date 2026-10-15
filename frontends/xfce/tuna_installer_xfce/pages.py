@@ -2,22 +2,47 @@
 Flow and recipe contract: ../../INSTALLER-FRONTENDS.md."""
 
 import os
-import re
 
 import gi
 
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gdk, GLib, Gtk, Pango
 
-from . import core, progress_parser
+from . import core, fisherman_validate, progress_parser
 
-HOSTNAME_RE = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$")
+# The recipe's encryption types, in display order: fisherman's
+# encryption-choices.json (core.ENCRYPTION_CHOICES), which
+# tests/unit/test_encryption_choices.py holds to fisherman's own file. What
+# each one is called is branding copy, never a literal here.
+ENCRYPTION_TYPES = tuple(c["type"] for c in core.ENCRYPTION_CHOICES)
 
-# The recipe's encryption types, in display order: the enum of
-# shared/recipe/fisherman-recipe.schema.json, which
-# tests/unit/test_encryption_choices.py holds every frontend to. What each
-# one is called is branding copy, never a literal here.
-ENCRYPTION_TYPES = ("none", "luks-passphrase", "tpm2-luks", "tpm2-luks-passphrase")
+
+def live_check(on_result):
+    """`fisherman validate --json --partial -` for one page: debounced, off
+    the UI thread, answered on it (shared/recipe/README.md)."""
+    return fisherman_validate.LiveCheck(
+        core.VALIDATE_ARGV, on_result, timeout_add=GLib.timeout_add,
+        source_remove=GLib.source_remove, idle_add=GLib.idle_add)
+
+
+def problem_label():
+    """The line under a field that shows fisherman's problem with it."""
+    label = Gtk.Label(xalign=0)
+    label.set_line_wrap(True)
+    label.set_no_show_all(True)
+    label.get_style_context().add_class("error")
+    return label
+
+
+def show_problem(label, problem):
+    """Show `problem` (or nothing) in `label`: the copy key
+    validate_<code>, or fisherman's message for a code with no copy."""
+    if problem is None:
+        label.set_text("")
+        label.hide()
+        return
+    label.set_text(fisherman_validate.render(problem, core.BRANDING.text))
+    label.show()
 
 
 def encryption_text(enc_type, suffix):
@@ -93,9 +118,11 @@ class SourcePage(Page):
 
     def __init__(self, win):
         super().__init__(win)
-        self.live_ref = core.live_iso_image()
-        self.stores = core.offline_stores()
-        self.offline_refs = core.offline_images(self.stores) if self.stores else set()
+        # Live media and the offline images are fisherman's facts (probe's
+        # `live` and `offline`), read on the host.
+        self.live = core.is_live()
+        self.live_image = core.live_image()
+        self.offline_refs = core.offline_images()
         _, _, self.catalog = core.load_catalog()
         self.leaves = [l for root in self.catalog for l in root.leaves()]
 
@@ -123,7 +150,7 @@ class SourcePage(Page):
         scroll.add(self.listbox)
         self.pack_start(scroll, True, True, 0)
 
-        if self.live_ref:
+        if self.live:
             # The same row GNOME shows: welcome_install and its subtitle. The
             # "[available offline]" tag already says no download is needed.
             add_radio(core.BRANDING.text("welcome_install") + " (this system)",
@@ -225,7 +252,7 @@ class SetupPage(Page):
         self.enc_radios = []
         group = None
         for value in ENCRYPTION_TYPES:
-            if value.startswith("tpm2") and not self.has_tpm:
+            if core.needs_tpm2(value) and not self.has_tpm:
                 continue
             radio = Gtk.RadioButton.new_with_label_from_widget(
                 group, encryption_text(value, "_label"))
@@ -244,13 +271,22 @@ class SetupPage(Page):
         self.pass1 = Gtk.Entry(visibility=False, input_purpose=Gtk.InputPurpose.PASSWORD)
         self.pass2 = Gtk.Entry(visibility=False, input_purpose=Gtk.InputPurpose.PASSWORD)
         for e in (self.pass1, self.pass2):
-            e.connect("changed", lambda *_: self.win.refresh_nav())
+            e.connect("changed", self._sync)
         grid.attach(Gtk.Label(label="Passphrase", xalign=0), 0, 0, 1, 1)
         grid.attach(self.pass1, 1, 0, 1, 1)
         grid.attach(Gtk.Label(label="Confirm", xalign=0), 0, 1, 1, 1)
         grid.attach(self.pass2, 1, 1, 1, 1)
         self.pass_grid = grid
         self.pack_start(grid, False, False, 0)
+        # fisherman's answer for the encryption and filesystem choice: an
+        # empty passphrase, or LUKS on ZFS (encryption.*, filesystem).
+        self.problem = None
+        self.problem_label = problem_label()
+        self.pack_start(self.problem_label, False, False, 0)
+        self.check = live_check(self._on_checked)
+        # Checked from the first visit on: before it, the window has no
+        # image selection to take the filesystem from.
+        self._entered = False
 
         adv = Gtk.Expander(label="Advanced")
         advbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin=6)
@@ -275,7 +311,24 @@ class SetupPage(Page):
         self._sync()
 
     def _sync(self, *_):
-        self.pass_grid.set_sensitive("passphrase" in self.enc_type())
+        self.pass_grid.set_sensitive(core.needs_passphrase(self.enc_type()))
+        self.win.refresh_nav()
+        if getattr(self, "check", None) is not None and self._entered:
+            self.check.submit(self.partial_recipe())
+
+    def partial_recipe(self):
+        leaf = self.win.selected_leaf()
+        enc = {"type": self.enc_type()}
+        if core.needs_passphrase(enc["type"]):
+            enc["passphrase"] = self.pass1.get_text()
+        return {"filesystem": self.default_filesystem(leaf.filesystem if leaf else ""),
+                "encryption": enc}
+
+    def _on_checked(self, problems, error):
+        problems = problems or []
+        self.problem = next((p for p in problems if p.get("field", "").startswith(
+            ("encryption", "filesystem"))), None)
+        show_problem(self.problem_label, self.problem)
         self.win.refresh_nav()
 
     def enc_type(self):
@@ -285,7 +338,11 @@ class SetupPage(Page):
         return "none"
 
     def can_continue(self):
-        if "passphrase" in self.enc_type():
+        # The passphrase rule (not empty) is fisherman's; that the two
+        # entries match is this page's.
+        if self.problem is not None:
+            return False
+        if core.needs_passphrase(self.enc_type()):
             p1, p2 = self.pass1.get_text(), self.pass2.get_text()
             return bool(p1) and p1 == p2
         return True
@@ -305,11 +362,14 @@ class SetupPage(Page):
     def _on_fs_changed(self, *_):
         if not self._fs_syncing:
             self._fs_chosen = True
+            self._sync()
 
     def on_enter(self):
         if not self._fs_chosen:
             leaf = self.win.selected_leaf()
             self._show_filesystem((leaf.filesystem if leaf else "") or "xfs")
+        self._entered = True
+        self.check.submit(self.partial_recipe())
 
     def default_filesystem(self, leaf_default):
         # Catalog default wins unless the user touched Advanced. This used to
@@ -327,9 +387,10 @@ class IdentityPage(Page):
         super().__init__(win)
         grid = Gtk.Grid(column_spacing=12, row_spacing=6)
         self.hostname = Gtk.Entry(text=core.BRANDING.default_hostname)
-        self.hostname.connect("changed", lambda *_: win.refresh_nav())
         grid.attach(Gtk.Label(label="Hostname", xalign=0), 0, 0, 1, 1)
         grid.attach(self.hostname, 1, 0, 1, 1)
+        self.hostname_problem = problem_label()
+        grid.attach(self.hostname_problem, 1, 1, 1, 1)
         self.pack_start(grid, False, False, 0)
 
         self.user_frame = Gtk.Frame(label="Your account", margin_top=8)
@@ -340,20 +401,49 @@ class IdentityPage(Page):
         for i, (lbl, entry) in enumerate((("Username", self.username),
                                           ("Full name", self.fullname),
                                           ("Password", self.password))):
-            ug.attach(Gtk.Label(label=lbl, xalign=0), 0, i, 1, 1)
-            ug.attach(entry, 1, i, 1, 1)
+            ug.attach(Gtk.Label(label=lbl, xalign=0), 0, i * 2, 1, 1)
+            ug.attach(entry, 1, i * 2, 1, 1)
             entry.connect("changed", lambda *_: win.refresh_nav())
+        self.username_problem = problem_label()
+        ug.attach(self.username_problem, 1, 1, 1, 1)
         self.user_frame.add(ug)
         self.pack_start(self.user_frame, False, False, 0)
 
+        # The hostname and username rules are fisherman's
+        # (`fisherman validate --json --partial -`). The hostname used to be
+        # a single-label pattern here with no length limit, and the username
+        # was not checked at all, so "root" failed after the OS was on disk.
+        self.problems = {}
+        self.check = live_check(self._on_checked)
+        for entry in (self.hostname, self.username):
+            entry.connect("changed", lambda *_: self.check.submit(self.partial_recipe()))
+
+    def partial_recipe(self):
+        partial = {"hostname": self.hostname.get_text()}
+        if self.win.needs_user_creation():
+            partial["user"] = {"username": self.username.get_text()}
+        return partial
+
+    def _on_checked(self, problems, error):
+        problems = problems or []
+        self.problems = {f: next((p for p in problems if p.get("field") == f), None)
+                         for f in ("hostname", "user.username")}
+        show_problem(self.hostname_problem, self.problems["hostname"])
+        show_problem(self.username_problem, self.problems["user.username"])
+        self.win.refresh_nav()
+
     def on_enter(self):
         self.user_frame.set_visible(self.win.needs_user_creation())
+        self.check.submit(self.partial_recipe())
 
     def can_continue(self):
-        if not HOSTNAME_RE.match(self.hostname.get_text()):
+        if self.problems.get("hostname") is not None:
             return False
         if self.win.needs_user_creation():
-            return bool(self.username.get_text()) and bool(self.password.get_text())
+            # A user is required for this image (needs_user_creation), and
+            # the password rule is this page's; fisherman accepts any.
+            return (bool(self.username.get_text()) and bool(self.password.get_text())
+                    and self.problems.get("user.username") is None)
         return True
 
 
@@ -385,14 +475,13 @@ class ConfirmPage(Page):
     def on_enter(self):
         r = self.win.build_recipe()
         lines = [
-            f"Image:       {r.get('image') or 'this live system'}",
+            "Image:       " + (r.get("image") or self.win.pages["source"].live_image
+                                 or "this live system"),
             f"Disk:        {self.win.pages['destination'].selected_disk()['path']}",
             f"Filesystem:  {r['filesystem']}",
             f"Encryption:  {encryption_text(r['encryption']['type'] or 'none', '_label')}",
             f"Hostname:    {r['hostname']}",
         ]
-        if r.get("additionalImageStores"):
-            lines.append(f"Offline stores: {', '.join(r['additionalImageStores'])}")
         if r.get("user", {}).get("username"):
             lines.append(f"User:        {r['user']['username']}")
         self.summary.set_markup("<tt>" + GLib.markup_escape_text("\n".join(lines)) + "</tt>")

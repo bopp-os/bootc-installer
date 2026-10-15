@@ -11,7 +11,8 @@ sources = [
   'timezones.py',
   'disks.py',
   'system.py',
-  'fisherman_probe.py'
+  'fisherman_probe.py',
+  'fisherman_validate.py',
 ]
 
 install_data(sources, install_dir: coredir)

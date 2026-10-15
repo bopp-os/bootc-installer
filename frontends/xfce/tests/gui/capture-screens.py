@@ -145,8 +145,12 @@ def _fake_host_run(argv, **kwargs):
 
 
 core.host_run = _fake_host_run
-core.live_iso_image = lambda: None
-core.offline_stores = lambda: []
+# The probe fixture is a laptop booted from a live USB. This walkthrough
+# shows the catalog as an installed session sees it, as it always has: not
+# live media, nothing offline (both are the probe's `live` and `offline`).
+core.is_live = lambda: False
+core.live_image = lambda: ""
+core.offline_images = lambda: set()
 
 from tuna_installer_xfce.app import PAGE_ORDER, InstallerWindow  # noqa: E402,F401
 

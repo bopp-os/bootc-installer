@@ -54,10 +54,12 @@ SOURCES = {
     "xfce": [("frontends/xfce/tuna_installer_xfce", ("*.py",))],
 }
 
-RESOLVERS = re.compile(r"^(branding\.(py|rs|cpp|h|go)|branding_defaults\.h\.in|copy-defaults\.json)$")
+RESOLVERS = re.compile(r"^(branding\.(py|rs|cpp|h|go)|branding_defaults\.h\.in|copy-defaults\.json"
+                       r"|fisherman_validate\.py)$")
 
 # frontend -> {key: why it is not rendered there}. Every row is a parity gap,
-# not an exemption on principle.
+# not an exemption on principle. A key ending in "*" names every contract key
+# with that prefix (the validate_* family is rendered, or not, as one).
 KNOWN_GAPS = {
     "gnome": {
         "welcome_button": "bootc_installer/gtk/default-welcome.blp hardcodes the button label",
@@ -79,6 +81,22 @@ KNOWN_GAPS = {
     "xfce": {
     },
 }
+
+
+def expand(keys, names):
+    """`names` with any "prefix*" entry replaced by the contract keys it
+    covers."""
+    out = set()
+    for name in names:
+        if name.endswith("*"):
+            out |= {k for k in keys if k.startswith(name[:-1])}
+        else:
+            out.add(name)
+    return out
+
+
+def gaps(frontend, keys):
+    return expand(keys, KNOWN_GAPS.get(frontend, {}))
 
 
 def contract_keys():
@@ -190,6 +208,27 @@ def rendered_step_keys(text, keys):
     return set()
 
 
+VALIDATE_PREFIX = "validate_"
+# The shared Python reader's render(): it joins the prefix with the code, so
+# a Python frontend that calls it renders every validate_* key.
+VALIDATE_RENDER = "fisherman_validate.render("
+
+
+def rendered_validate_keys(text, keys):
+    """Problem keys a frontend builds from fisherman's error code at run time.
+
+    `fisherman validate --json` owns the codes (fisherman/docs/VALIDATE.md)
+    and no frontend keeps the list, so none names validate_hostname_required
+    whole. A frontend that joins a "validate_" literal with the code, or
+    calls the shared reader's render(), renders every validate_* key.
+    tests/unit/test_shared_validate.py holds the keys to fisherman's codes.
+    """
+    if (f'"{VALIDATE_PREFIX}"' in text or f"'{VALIDATE_PREFIX}'" in text
+            or VALIDATE_RENDER in text):
+        return {k for k in keys if k.startswith(VALIDATE_PREFIX)}
+    return set()
+
+
 def rendered_keys(frontend, keys):
     """Keys named anywhere in this frontend's non-resolver, non-comment code.
 
@@ -209,7 +248,7 @@ def rendered_keys(frontend, keys):
     # method name is not a render.
     named = {k for k in keys if f'"{k}"' in joined or f"'{k}'" in joined}
     return (named | (rendered_encryption_keys(joined) & set(keys))
-            | rendered_step_keys(joined, keys))
+            | rendered_step_keys(joined, keys) | rendered_validate_keys(joined, keys))
 
 
 class NiriTableMatchesTheContract(unittest.TestCase):
@@ -260,7 +299,10 @@ def parity_table():
             continue
         name = cells[0].strip("`")
         if len(cells) == len(columns) + 1:
-            rows[name] = dict(zip(columns, cells[1:]))
+            row = dict(zip(columns, cells[1:]))
+            # One row stands for a family of keys: `validate_*`.
+            for key in (expand(contract_keys(), [name]) if name.endswith("*") else [name]):
+                rows[key] = row
     return rows
 
 
@@ -284,7 +326,7 @@ class ParityPageMatchesTheGaps(unittest.TestCase):
                 if frontend not in SOURCES:
                     continue
                 says_no = cell.lower().startswith("no")
-                is_gap = key in KNOWN_GAPS.get(frontend, {})
+                is_gap = key in gaps(frontend, self.keys)
                 self.assertEqual(
                     says_no, is_gap,
                     f"docs/PARITY.md {key}/{frontend} says {cell!r} but "
@@ -307,6 +349,25 @@ class StepKeys(unittest.TestCase):
         keys = {"step_install_os": ""}
         self.assertEqual(rendered_step_keys('"step_install_os"', keys), set())
         self.assertEqual(rendered_step_keys("step_ = 1", keys), set())
+
+
+class ValidateKeys(unittest.TestCase):
+    def test_a_validate_prefix_literal_renders_every_validate_key(self):
+        keys = {"validate_hostname_required": "", "validate_username_reserved": "",
+                "done_title": ""}
+        both = {"validate_hostname_required", "validate_username_reserved"}
+        self.assertEqual(rendered_validate_keys('text("validate_" + code)', keys), both)
+        self.assertEqual(rendered_validate_keys(
+            "fisherman_validate.render(problem, text)", keys), both)
+
+    def test_a_key_name_alone_is_not_the_prefix(self):
+        keys = {"validate_hostname_required": ""}
+        self.assertEqual(rendered_validate_keys('"validate_hostname_required"', keys), set())
+
+    def test_a_wildcard_gap_expands_to_the_family(self):
+        keys = {"validate_a": "", "validate_b": "", "done_title": ""}
+        self.assertEqual(expand(keys, ["validate_*", "done_title"]),
+                         {"validate_a", "validate_b", "done_title"})
 
 
 class CommentStripping(unittest.TestCase):
@@ -333,7 +394,7 @@ class EveryFrontendRendersEveryKey(unittest.TestCase):
         for frontend in SOURCES:
             with self.subTest(frontend=frontend):
                 missing = set(self.keys) - rendered_keys(frontend, self.keys)
-                unlisted = sorted(missing - set(KNOWN_GAPS.get(frontend, {})))
+                unlisted = sorted(missing - gaps(frontend, self.keys))
                 self.assertEqual(
                     unlisted, [],
                     f"{frontend} renders no copy for {unlisted}. Wire the keys up, "
@@ -342,19 +403,20 @@ class EveryFrontendRendersEveryKey(unittest.TestCase):
 
     def test_no_stale_gaps(self):
         """A gap that has been closed must lose its row, or the backlog lies."""
-        for frontend, gaps in KNOWN_GAPS.items():
+        for frontend in KNOWN_GAPS:
             with self.subTest(frontend=frontend):
                 rendered = rendered_keys(frontend, self.keys)
-                stale = sorted(set(gaps) & rendered)
+                stale = sorted(gaps(frontend, self.keys) & rendered)
                 self.assertEqual(
                     stale, [],
                     f"{frontend} does render {stale}; delete those rows from KNOWN_GAPS.",
                 )
 
     def test_gaps_name_real_keys(self):
-        for frontend, gaps in KNOWN_GAPS.items():
-            for key, why in gaps.items():
-                self.assertIn(key, self.keys, f"{frontend}: {key} is not on the contract")
+        for frontend, listed in KNOWN_GAPS.items():
+            for key, why in listed.items():
+                self.assertTrue(expand(self.keys, [key]) & set(self.keys),
+                                f"{frontend}: {key} is not on the contract")
                 self.assertTrue(why.strip(), f"{frontend}: {key} needs a reason")
 
     def test_the_scan_finds_something(self):

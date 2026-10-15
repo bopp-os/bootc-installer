@@ -1,13 +1,13 @@
-"""Backend plumbing shared by every page: catalog, disks, offline stores,
-recipe emission, and fisherman invocation. See ../INSTALLER-FRONTENDS.md."""
+"""Backend plumbing shared by every page: catalog, disks, live and offline
+facts, recipe emission, validation and fisherman invocation. See
+../INSTALLER-FRONTENDS.md."""
 
 import json
 import os
 import shlex
 import subprocess
-import tempfile
 
-from tuna_installer_xfce import branding, fisherman_probe
+from tuna_installer_xfce import branding, fisherman_probe, fisherman_validate
 
 IN_FLATPAK = os.path.exists("/.flatpak-info")
 
@@ -62,8 +62,27 @@ def dry_run():
 # There is no fallback scan when the probe fails: the destination page shows
 # the reason instead and offers no disk.
 FISHERMAN_PATH = "/usr/local/bin/fisherman"
-PROBE_ARGV = (["flatpak-spawn", "--host"] if IN_FLATPAK else []) + [
-    FISHERMAN_PATH, "probe", "--json"]
+# fisherman, unprivileged, on the host: for `probe --json` and
+# `validate --json`. Never through pkexec or sudo.
+FISHERMAN_UNPRIVILEGED = (["flatpak-spawn", "--host"] if IN_FLATPAK else []) + [FISHERMAN_PATH]
+PROBE_ARGV = FISHERMAN_UNPRIVILEGED + ["probe", "--json"]
+# `fisherman validate --json --partial -`: a page's fields as a partial
+# recipe on stdin (shared/recipe/README.md). fisherman owns the hostname,
+# username, filesystem and encryption rules.
+VALIDATE_ARGV = fisherman_validate.argv(FISHERMAN_UNPRIVILEGED)
+
+# The encryption types in display order, with needs_passphrase and
+# needs_tpm2: a byte-identical copy of fisherman's
+# data/encryption-choices.json (tests/unit/test_encryption_choices.py).
+ENCRYPTION_CHOICES = fisherman_validate.load_choices()
+
+
+def needs_passphrase(enc_type):
+    return fisherman_validate.needs_passphrase(enc_type, ENCRYPTION_CHOICES)
+
+
+def needs_tpm2(enc_type):
+    return fisherman_validate.needs_tpm2(enc_type, ENCRYPTION_CHOICES)
 
 _probe_cache = {}
 
@@ -86,6 +105,32 @@ def has_tpm():
     """
     result, _ = probe()
     return fisherman_probe.tpm_usable(result) if result else False
+
+
+def is_live():
+    """Whether the host booted from live media: fisherman's live.is_live.
+
+    Only then may the recipe leave `image` empty, which installs the running
+    system; fisherman rejects an empty image anywhere else. This frontend
+    used to ask `bootc status` and read /proc/cmdline itself, inside its
+    Flatpak sandbox. False when the probe failed."""
+    result, _ = probe()
+    return fisherman_probe.is_live(result) if result else False
+
+
+def live_image():
+    """The booted image on live media (live.live_image); "" otherwise or
+    when bootc could not name it."""
+    result, _ = probe()
+    return fisherman_probe.live_image(result) if result else ""
+
+
+def offline_images():
+    """Image refs in the host's offline stores (probe's offline.images), for
+    the "[available offline]" tag. fisherman exposes those stores to the
+    install itself when the recipe leaves additionalImageStores out."""
+    result, _ = probe()
+    return set(fisherman_probe.offline_images(result)) if result else set()
 
 
 def unmet_requirements():
@@ -145,14 +190,18 @@ DRY_RUN_TRANSCRIPT = _load_dry_run_transcript()
 # process can never signal it; fisherman cancels itself when its PARENT dies
 # (tuna-os/fisherman#267). Launched directly, that parent was the host's
 # flatpak-session-helper, which nothing here can kill. With the wrapper it is
-# this bash. The recipe path is bash's $1, never part of the script text.
-# The wrapper does no redirection: stdout and stderr still come back through
-# flatpak-spawn's pipes, as before.
-FISHERMAN_WRAPPER_SCRIPT = 'pkexec /usr/local/bin/fisherman "$1"; exit $?'
+# this bash. The wrapper does no redirection: stdout and stderr still come
+# back through flatpak-spawn's pipes, as before.
+#
+# `-`: fisherman reads the recipe from stdin (tuna-os/fisherman#276). The
+# app writes the JSON to the wrapper's stdin and closes it, so no file ever
+# holds the passphrase or the user password. bash, pkexec, sudo and
+# flatpak-spawn all pass stdin through.
+FISHERMAN_WRAPPER_SCRIPT = 'pkexec /usr/local/bin/fisherman -; exit $?'
 FISHERMAN_CMD = (
-    ["flatpak-spawn", "--host", "bash", "-c", FISHERMAN_WRAPPER_SCRIPT, "--"]
+    ["flatpak-spawn", "--host", "bash", "-c", FISHERMAN_WRAPPER_SCRIPT]
     if IN_FLATPAK
-    else ["sudo", "/usr/local/bin/fisherman"]
+    else ["sudo", "/usr/local/bin/fisherman", "-"]
 )
 
 IMAGES_JSON_PATHS = [
@@ -163,10 +212,6 @@ IMAGES_JSON_PATHS = [
     "/app/share/fisherman/data/images.json",
     "/usr/share/fisherman/data/images.json",
 ]
-
-OFFLINE_STORES_FILE = "/etc/tuna-installer/offline-stores"
-OFFLINE_STORES_ENV = "TUNA_OFFLINE_STORES"
-OFFLINE_STORE_DEFAULT = "/usr/share/tuna-installer/oci-store"
 
 
 # --- product branding --------------------------------------------------------
@@ -242,57 +287,6 @@ def load_catalog():
     return "", [], []
 
 
-# --- offline / live-ISO detection --------------------------------------------
-
-def live_iso_image():
-    """Return the running bootc image ref when booted from live media, else None.
-
-    Live-ISO mode means the recipe may omit `image` entirely (bootc installs
-    the running container)."""
-    r = host_run(["bootc", "status", "--json"])
-    if r.returncode != 0:
-        return None
-    try:
-        status = json.loads(r.stdout)
-        booted = status.get("status", {}).get("booted") or {}
-        ref = booted.get("image", {}).get("image", {}).get("image", "")
-    except (json.JSONDecodeError, AttributeError):
-        return None
-    if not ref:
-        return None
-    with open("/proc/cmdline") as f:
-        live = "rd.live.image" in f.read()
-    return ref if (live or os.path.exists("/run/ostree-live")) else None
-
-
-def offline_stores():
-    """Paths of embedded OCI stores present on this medium."""
-    stores = []
-    env = os.environ.get(OFFLINE_STORES_ENV, "")
-    if env:
-        stores += env.split(":")
-    if os.path.exists(OFFLINE_STORES_FILE):
-        with open(OFFLINE_STORES_FILE) as f:
-            stores += [ln.strip() for ln in f if ln.strip() and not ln.startswith("#")]
-    stores.append(OFFLINE_STORE_DEFAULT)
-    return [s for s in dict.fromkeys(stores) if os.path.isdir(s)]
-
-
-def offline_images(stores):
-    """Set of image refs available across the given store roots."""
-    refs = set()
-    for store in stores:
-        r = host_run(["podman", "images", "--root", store, "--format", "json"])
-        if r.returncode != 0:
-            continue
-        try:
-            for img in json.loads(r.stdout):
-                refs.update(img.get("Names") or [])
-        except json.JSONDecodeError:
-            continue
-    return refs
-
-
 # --- disks --------------------------------------------------------------------
 
 def candidate_disks():
@@ -309,7 +303,7 @@ def candidate_disks():
 def build_recipe(*, disk, filesystem, btrfs_subvolumes=False,
                  encryption_type="none", passphrase="", image="",
                  hostname="", bootloader="", composefs=False, flatpaks="",
-                 stores=(), needs_user=True, username="", fullname="",
+                 needs_user=True, username="", fullname="",
                  password="", branding=None):
     """Assemble the fisherman recipe from already-resolved values.
 
@@ -326,9 +320,9 @@ def build_recipe(*, disk, filesystem, btrfs_subvolumes=False,
 
       * `btrfsSubvolumes` is only meaningful on btrfs, and is False elsewhere
         regardless of what the Advanced checkbox says.
-      * The passphrase is only emitted for an encryption type that takes one,
-        so a stale entry left in the box cannot leak into a recipe for an
-        unencrypted install.
+      * The passphrase is only emitted for an encryption type that takes one
+        (`needs_passphrase` in encryption-choices.json), so a stale entry
+        left in the box cannot leak into a recipe for an unencrypted install.
       * `bootloader`, `composeFsBackend` and `flatpaks` are catalog-leaf
         properties: absent keys mean "let fisherman decide", which is not the
         same as an empty value.
@@ -349,7 +343,7 @@ def build_recipe(*, disk, filesystem, btrfs_subvolumes=False,
         # The branding's id, never a literal: see resolve_branding().
         "distroID": (branding or BRANDING).id,
     }
-    if "passphrase" in encryption_type:
+    if needs_passphrase(encryption_type):
         recipe["encryption"]["passphrase"] = passphrase
     if bootloader:
         recipe["bootloader"] = bootloader
@@ -357,9 +351,6 @@ def build_recipe(*, disk, filesystem, btrfs_subvolumes=False,
         recipe["composeFsBackend"] = True
     if flatpaks and not flatpaks.startswith("@"):
         recipe["flatpaks"] = flatpaks.split()
-    # Always pass detected stores; fisherman ignores unhelpful ones (§4B).
-    if stores:
-        recipe["additionalImageStores"] = stores
     if needs_user and username:
         recipe["user"] = {
             "username": username,
@@ -370,60 +361,22 @@ def build_recipe(*, disk, filesystem, btrfs_subvolumes=False,
     return recipe
 
 
-def write_recipe(recipe):
-    """Write the recipe 0600 in a fresh private directory; return its path.
-
-    The recipe may hold a LUKS passphrase and a user password — never put it
-    somewhere world-readable.
-
-    The DIRECTORY matters as much as the file mode here. This used to create a
-    fixed `<base>/tuna-installer` with `exist_ok=True`, and when
-    XDG_RUNTIME_DIR is unset — the default under `sudo` (env_reset strips it),
-    from a TTY, and from any launcher that is not a logind session — `base` is
-    /tmp, so the path was the constant `/tmp/tuna-installer`. `makedirs` with
-    `exist_ok=True` applies its `mode` only when it actually creates the
-    directory: a pre-existing 0777 directory was accepted as-is, handing an
-    unprivileged local user ownership of the directory every recipe lands in.
-
-    mkstemp kept the file itself unpredictable and 0600, so the passphrase was
-    never directly readable. The exposure was control of the PATH, and the path
-    is what gets handed to root: `fisherman_argv()` passes it to
-    sudo/pkexec fisherman. Owning the directory means unlinking our recipe and
-    dropping a different one at the same name in the window before fisherman
-    opens it — root then installs an attacker-chosen image, onto an
-    attacker-chosen disk, with encryption turned off and a known user password.
-
-    mkdtemp closes that: it creates a 0700 directory with an unpredictable name
-    and O_EXCL semantics, so it cannot be pre-created and its mode cannot be
-    inherited from someone else's. Callers should remove the returned file's
-    directory (see `recipe_dir`) once fisherman has exited.
-    """
-    base = os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()
-    rundir = tempfile.mkdtemp(prefix="tuna-installer-", dir=base)
-    fd, path = tempfile.mkstemp(dir=rundir, suffix=".json")
-    with os.fdopen(fd, "w") as f:
-        json.dump(recipe, f, indent=2)
-    os.chmod(path, 0o600)
-    return path
+def recipe_stdin(recipe):
+    """The bytes the app writes to fisherman's stdin (`fisherman -`)."""
+    return json.dumps(recipe).encode("utf-8")
 
 
-def recipe_dir(recipe_path):
-    """The private directory `write_recipe` created for `recipe_path`."""
-    return os.path.dirname(recipe_path)
-
-
-def fisherman_argv(recipe_path, in_flatpak=None):
-    """The argv that runs fisherman on `recipe_path` with privileges."""
+def fisherman_argv(in_flatpak=None):
+    """The argv that runs fisherman with privileges, the recipe on stdin."""
     if in_flatpak is None:
-        return FISHERMAN_CMD + [recipe_path]
+        return list(FISHERMAN_CMD)
     if in_flatpak:
-        return ["flatpak-spawn", "--host", "bash", "-c",
-                FISHERMAN_WRAPPER_SCRIPT, "--", recipe_path]
-    return ["sudo", "/usr/local/bin/fisherman", recipe_path]
+        return ["flatpak-spawn", "--host", "bash", "-c", FISHERMAN_WRAPPER_SCRIPT]
+    return ["sudo", "/usr/local/bin/fisherman", "-"]
 
 
-def fisherman_shell(recipe_path):
-    return " ".join(shlex.quote(a) for a in fisherman_argv(recipe_path))
+def fisherman_shell():
+    return " ".join(shlex.quote(a) for a in fisherman_argv())
 
 
 # --- install log --------------------------------------------------------------

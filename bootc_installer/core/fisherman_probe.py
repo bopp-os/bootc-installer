@@ -126,6 +126,28 @@ def is_uefi(result):
     return bool((result.get("system") or {}).get("uefi"))
 
 
+def is_live(result):
+    """Whether the host booted from live media (probe's live.is_live). Only
+    then may a recipe leave `image` empty: fisherman installs the running
+    image, and rejects an empty image anywhere else (image_required)."""
+    return bool((result.get("live") or {}).get("is_live"))
+
+
+def live_image(result):
+    """The booted image ref when live; "" otherwise or when bootc could not
+    say. What a frontend shows as the image of a live install."""
+    if not is_live(result):
+        return ""
+    return (result.get("live") or {}).get("live_image") or ""
+
+
+def offline_images(result):
+    """Image refs present in the host's offline stores (offline.images), for
+    an "available offline" tag. The stores themselves are fisherman's: a
+    recipe that leaves additionalImageStores out gets them."""
+    return list((result.get("offline") or {}).get("images") or [])
+
+
 def format_size(nbytes):
     """fisherman's size rule (binary units, labelled honestly), for the rare
     size fisherman does not report itself, such as a partition. A disk's size

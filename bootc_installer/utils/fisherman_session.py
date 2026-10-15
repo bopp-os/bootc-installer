@@ -2,8 +2,10 @@
 
 Owns everything about running the privileged fisherman helper that is not
 GTK: staging (delegated to fisherman_runner), argv construction (ditto),
-launching and polling the subprocess, tailing its log file for new lines,
-and securely deleting the recipe file once the install finishes.
+launching and polling the subprocess, handing it the recipe on stdin, and
+tailing its log file for new lines. No recipe file is written: fisherman
+reads the recipe from stdin (`fisherman -`, tuna-os/fisherman#276), so the
+passphrase and the user password never touch the disk.
 
 `bootc_installer.views.progress.BootcProgress` is the GTK consumer: it owns
 the widget state (progress bar, video, console) and the GLib timers that
@@ -16,6 +18,7 @@ boundary; this module only decides *when* to hand it a line, not how to
 interpret one.
 """
 
+import json
 import logging
 import os
 import signal
@@ -36,19 +39,19 @@ class FishermanSession:
 
     def __init__(
         self,
-        recipe_path: str,
+        recipe: dict,
         *,
         in_flatpak: bool = fisherman_runner.IN_FLATPAK,
-        live_iso: bool = fisherman_runner.LIVE_ISO,
+        use_sudo: bool = False,
         stage_base: str = fisherman_runner.STAGE_BASE,
         cache_dir: str = fisherman_runner.CACHE_DIR,
         host_path: str = fisherman_runner.HOST_PATH,
         log_path: str = fisherman_runner.LOG_PATH,
         popen=None,
     ):
-        self.recipe_path = recipe_path
+        self._recipe = recipe
         self._in_flatpak = in_flatpak
-        self._live_iso = live_iso
+        self._use_sudo = use_sudo
         self._stage_base = stage_base
         self._cache_dir = cache_dir
         self._host_path = host_path
@@ -119,9 +122,8 @@ class FishermanSession:
         self._reset_log_file()
         self._create_private_log()
         argv = fisherman_runner.build_argv(
-            self.recipe_path,
             in_flatpak=self._in_flatpak,
-            live_iso=self._live_iso,
+            use_sudo=self._use_sudo,
             host_path=self._host_path,
             log_path=self.log_path,
         )
@@ -130,15 +132,41 @@ class FishermanSession:
         # redirection. Do NOT pass stdout= here — flatpak-spawn uses D-Bus,
         # not a real pipe fd, so a Python-side pipe would never fill.
         #
+        # stdin IS a pipe: it carries the recipe. flatpak-spawn forwards its
+        # stdin fd to the host bash, and bash, pkexec and sudo hand it on to
+        # fisherman, which reads to EOF.
+        #
         # start_new_session: the wrapper (bash, or flatpak-spawn) leads its
         # own process group, which terminate() signals. Without it the
         # wrapper shared the GUI's group, and terminate()'s
         # killpg(getpgid(wrapper)) sent SIGTERM to the installer itself.
         # fisherman runs as root under pkexec, so the wrapper is all this
         # process can signal; fisherman cancels when its parent dies.
-        self.proc = self._popen(argv, start_new_session=True)
+        self.proc = self._popen(argv, stdin=subprocess.PIPE, start_new_session=True)
         logger.info("Fisherman PID: %s", self.proc.pid)
+        self._write_recipe()
         return argv
+
+    def _write_recipe(self):
+        """Write the recipe to fisherman's stdin and close it.
+
+        A recipe is a few KiB, well under a pipe's buffer, so the write does
+        not wait for fisherman (or the polkit prompt in front of it) to read.
+        If the wrapper is already gone, fisherman never ran and its exit code
+        says why; nothing is written anywhere else.
+        """
+        stdin = getattr(self.proc, "stdin", None)
+        if stdin is None:
+            return
+        try:
+            stdin.write(json.dumps(self._recipe).encode("utf-8"))
+        except (BrokenPipeError, OSError) as e:
+            logger.error("Could not hand the recipe to fisherman: %s", e)
+        finally:
+            try:
+                stdin.close()
+            except OSError:
+                pass
 
     def poll_process(self):
         """Return the exit code if fisherman has finished, else None."""
@@ -230,16 +258,3 @@ class FishermanSession:
         except subprocess.TimeoutExpired:
             logger.warning("fisherman wrapper (PID %s) still running %.0fs after SIGTERM",
                            self.proc.pid, self.TERMINATE_TIMEOUT)
-
-    def cleanup_recipe_file(self):
-        """Remove the recipe JSON file — it contains plaintext passphrases and
-        passwords that must not persist on disk after install."""
-        if not self.recipe_path:
-            return
-        try:
-            os.unlink(self.recipe_path)
-            logger.info("Deleted recipe file: %s", self.recipe_path)
-        except FileNotFoundError:
-            pass
-        except OSError as e:
-            logger.warning("Could not delete recipe file %s: %s", self.recipe_path, e)

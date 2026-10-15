@@ -160,22 +160,11 @@ func TestDiscoverDisksFailsWhenTheProbeFails(t *testing.T) {
 // detect
 // ---------------------------------------------------------------------------
 
-// The six keys detectEnvironment emits are the frontend's environment
-// contract: installer.qml reads each one by name. Renaming or dropping one
-// breaks the UI silently, so pin them.
+// The keys detectEnvironment emits are the frontend's environment contract:
+// installer.qml reads each one by name. Renaming or dropping one breaks the
+// UI silently, so pin them.
 func TestDetectEmitsTheEnvironmentContract(t *testing.T) {
-	dir := t.TempDir()
-	writeStub(t, dir, "bootc", "#!/bin/sh\nexit 1\n")
-	writeStub(t, dir, "podman", "#!/bin/sh\nexit 1\n")
-	storeDir := filepath.Join(t.TempDir(), "oci-store")
-	if err := os.MkdirAll(storeDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	got := runCLI(t,
-		[]string{pathWith(dir), "TUNA_OFFLINE_STORES=" + storeDir,
-			fakeProbeEnv + "=" + filepath.Join(probeFixtures, "vm.json")},
-		"detect")
+	got := runCLI(t, []string{fakeProbeEnv + "=" + filepath.Join(probeFixtures, "vm.json")}, "detect")
 
 	if got.code != 0 {
 		t.Fatalf("exit code = %d, stderr = %q", got.code, got.stderr)
@@ -185,10 +174,15 @@ func TestDetectEmitsTheEnvironmentContract(t *testing.T) {
 	if err := json.Unmarshal([]byte(got.stdout), &env); err != nil {
 		t.Fatalf("stdout is not the JSON object the frontend parses: %v\n%s", err, got.stdout)
 	}
-	for _, key := range []string{"liveImage", "offlineStores", "offlineImages", "hasTpm", "unmet", "branding"} {
+	for _, key := range []string{"isLive", "liveImage", "offlineImages", "hasTpm", "unmet",
+		"encryptionChoices", "branding"} {
 		if _, ok := env[key]; !ok {
 			t.Errorf("detect output is missing the %q key; got %v", key, env)
 		}
+	}
+	// The stores are fisherman's now: the QML never sees or sends them.
+	if _, ok := env["offlineStores"]; ok {
+		t.Errorf("detect still reports offlineStores: %v", env["offlineStores"])
 	}
 	if _, ok := env["hasTpm"].(bool); !ok {
 		t.Errorf("hasTpm = %v (%T), want a bool", env["hasTpm"], env["hasTpm"])
@@ -196,8 +190,17 @@ func TestDetectEmitsTheEnvironmentContract(t *testing.T) {
 	if unmet, ok := env["unmet"].([]any); !ok || len(unmet) != 3 {
 		t.Errorf("unmet = %v (%T), want the vm fixture's three items", env["unmet"], env["unmet"])
 	}
-	if _, ok := env["liveImage"].(string); !ok {
-		t.Errorf("liveImage = %v (%T), want a string", env["liveImage"], env["liveImage"])
+	// The vm fixture booted from live media: live facts are the probe's.
+	if env["isLive"] != true || env["liveImage"] != "ghcr.io/example/os:stable" {
+		t.Errorf("isLive, liveImage = %v, %v; want the vm fixture's live facts", env["isLive"], env["liveImage"])
+	}
+	choices, ok := env["encryptionChoices"].([]any)
+	if !ok || len(choices) != 4 {
+		t.Fatalf("encryptionChoices = %v, want the four choices", env["encryptionChoices"])
+	}
+	if c := choices[3].(map[string]any); c["type"] != "tpm2-luks-passphrase" ||
+		c["needs_passphrase"] != true || c["needs_tpm2"] != true {
+		t.Errorf("encryptionChoices[3] = %v", c)
 	}
 	// The branding object per shared/branding/README.md; the QML reads its
 	// name, id, defaultHostname and defaultImage.
@@ -215,32 +218,119 @@ func TestDetectEmitsTheEnvironmentContract(t *testing.T) {
 	}
 }
 
-func TestDetectReportsTheStoresFromTheEnvironment(t *testing.T) {
+// An installed host is not live media, whatever bootc says: the probe says
+// so, and a failed probe is not live either.
+func TestDetectIsNotLiveOffLiveMediaOrWithoutAProbe(t *testing.T) {
+	for _, fixture := range []string{filepath.Join(probeFixtures, "container.json"), "/nonexistent/probe.json"} {
+		got := runCLI(t, []string{fakeProbeEnv + "=" + fixture}, "detect")
+		var env struct {
+			IsLive        bool     `json:"isLive"`
+			LiveImage     string   `json:"liveImage"`
+			OfflineImages []string `json:"offlineImages"`
+		}
+		if err := json.Unmarshal([]byte(got.stdout), &env); err != nil {
+			t.Fatalf("%s: %v\n%s", fixture, err, got.stdout)
+		}
+		if env.IsLive || env.LiveImage != "" || env.OfflineImages == nil || len(env.OfflineImages) != 0 {
+			t.Errorf("%s: %+v, want not live and an empty offlineImages array", fixture, env)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// install: the recipe on fisherman's stdin
+// ---------------------------------------------------------------------------
+
+func TestInstallPipesTheRecipeToFishermanOnStdin(t *testing.T) {
+	if inFlatpak() {
+		t.Skip("running inside a Flatpak sandbox")
+	}
 	dir := t.TempDir()
-	writeStub(t, dir, "bootc", "#!/bin/sh\nexit 1\n")
-	writeStub(t, dir, "podman", "#!/bin/sh\nexit 1\n")
-	base := t.TempDir()
-	present := filepath.Join(base, "present")
-	if err := os.MkdirAll(present, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	absent := filepath.Join(base, "absent")
+	argsFile := filepath.Join(dir, "args")
+	stdinFile := filepath.Join(dir, "stdin")
+	// sudo stands in for the escalation: it records what fisherman would get.
+	writeStub(t, dir, "sudo", "#!/bin/sh\necho \"$@\" > "+argsFile+"\ncat > "+stdinFile+"\n")
+	runtime := t.TempDir()
+	recipe := `{"disk":"/dev/vda","filesystem":"xfs","encryption":{"type":"luks-passphrase","passphrase":"s3cret"},"hostname":"h","distroID":"x","selinuxDisabled":false}`
 
-	got := runCLI(t,
-		[]string{pathWith(dir), "TUNA_OFFLINE_STORES=" + present + string(os.PathListSeparator) + absent},
-		"detect")
+	cmd := exec.Command(os.Args[0])
+	cmd.Env = append(os.Environ(), "GO_TEST_CLI_ARGV=install", pathWith(dir),
+		"XDG_RUNTIME_DIR="+runtime, "TMPDIR="+runtime, "XDG_STATE_HOME="+t.TempDir())
+	cmd.Stdin = strings.NewReader(recipe)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("install: %v\n%s", err, out)
+	}
+	args, _ := os.ReadFile(argsFile)
+	if strings.TrimSpace(string(args)) != "/usr/local/bin/fisherman -" {
+		t.Errorf("fisherman argv = %q, want the stdin form", args)
+	}
+	if strings.Contains(string(args), "s3cret") {
+		t.Error("the passphrase reached argv")
+	}
+	var got Recipe
+	data, _ := os.ReadFile(stdinFile)
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("fisherman's stdin is not the recipe: %v\n%s", err, data)
+	}
+	if got.Encryption.Passphrase != "s3cret" || got.AdditionalImageStores != nil {
+		t.Errorf("recipe on stdin = %+v; want it as sent, with no stores added", got)
+	}
+	entries, _ := os.ReadDir(runtime)
+	if len(entries) != 0 {
+		t.Errorf("install left files behind: %v", entries)
+	}
+}
 
-	if got.code != 0 {
-		t.Fatalf("exit code = %d, stderr = %q", got.code, got.stderr)
+// ---------------------------------------------------------------------------
+// validate: fisherman's answer, passed through
+// ---------------------------------------------------------------------------
+
+func TestValidatePassesFishermansAnswerThrough(t *testing.T) {
+	if inFlatpak() {
+		t.Skip("running inside a Flatpak sandbox")
 	}
-	var env struct {
-		OfflineStores []string `json:"offlineStores"`
+	dir := t.TempDir()
+	stdinFile := filepath.Join(dir, "stdin")
+	argsFile := filepath.Join(dir, "args")
+	fake := filepath.Join(dir, "fisherman")
+	answer := `{"protocol_version":1,"valid":false,"errors":[{"field":"hostname","code":"hostname_label_hyphen","message":"m"}]}`
+	writeStub(t, dir, "fisherman", "#!/bin/sh\necho \"$@\" > "+argsFile+"\ncat > "+stdinFile+"\necho '"+answer+"'\nexit 1\n")
+
+	var stdout, stderr strings.Builder
+	code := runValidateWith([]string{fake, "validate", "--json", "--partial", "-"},
+		strings.NewReader(`{"hostname":"-router"}`), &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("code = %d, stderr = %q", code, stderr.String())
 	}
-	if err := json.Unmarshal([]byte(got.stdout), &env); err != nil {
-		t.Fatal(err)
+	if strings.TrimSpace(stdout.String()) != answer {
+		t.Errorf("stdout = %q, want fisherman's answer", stdout.String())
 	}
-	if len(env.OfflineStores) != 1 || env.OfflineStores[0] != present {
-		t.Errorf("offlineStores = %v, want only the directory that exists (%s)", env.OfflineStores, present)
+	if data, _ := os.ReadFile(stdinFile); string(data) != `{"hostname":"-router"}` {
+		t.Errorf("fisherman read %q on stdin", data)
+	}
+}
+
+func TestValidateThatCannotRunIsExit2(t *testing.T) {
+	var stdout, stderr strings.Builder
+	code := runValidateWith([]string{"/nonexistent/fisherman"}, strings.NewReader("{}"), &stdout, &stderr)
+	if code != 2 || stdout.String() != "" {
+		t.Errorf("code = %d, stdout = %q; want 2 and nothing on stdout", code, stdout.String())
+	}
+}
+
+func TestValidateCommandIsUnprivilegedPartialAndOnStdin(t *testing.T) {
+	for _, flatpak := range []bool{false, true} {
+		argv := validateCommandFor(flatpak)
+		tail := strings.Join(argv[len(argv)-5:], " ")
+		if tail != "/usr/local/bin/fisherman validate --json --partial -" {
+			t.Errorf("validateCommandFor(%v) = %v", flatpak, argv)
+		}
+		for _, a := range argv {
+			if a == "sudo" || a == "pkexec" {
+				t.Errorf("validate runs privileged: %v", argv)
+			}
+		}
 	}
 }
 

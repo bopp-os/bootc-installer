@@ -88,11 +88,27 @@ are the `encryption.type` enum in `shared/recipe/fisherman-recipe.schema.json`:
 `none`, `luks-passphrase`, `tpm2-luks`, `tpm2-luks-passphrase`. An empty
 type means `none`.
 
-A frontend keeps only that list of ids, because its code branches on them.
-It builds each key from the id and gets the words from its resolver. The
-confirm page shows the label of the chosen type, never the id. `tests/unit/test_encryption_choices.py` compares the list in each
-frontend with the schema, and fails if a frontend hardcodes the words. Do
-not set a label to `""`: the choice then has no name.
+The list of ids, with `needs_passphrase` and `needs_tpm2` for each, is
+fisherman's `data/encryption-choices.json`, copied to
+`shared/recipe/encryption-choices.json`. Its `copy_key` is the stem of these
+keys. A frontend reads its copy of that file. It builds each key from the id
+and gets the words from its resolver. The confirm page shows the label of
+the chosen type, never the id. `tests/unit/test_encryption_choices.py`
+holds each copy to fisherman's file, and fails if a frontend hardcodes the
+words or decides by the type's name. Do not set a label to `""`: the choice
+then has no name.
+
+### Recipe problems
+
+`fisherman validate --json` reports each problem with a stable `code`
+(`fisherman/docs/VALIDATE.md`). The line a frontend shows is the copy key
+`validate_<code>`, for example `validate_hostname_invalid_char`. There is
+one key for each code fisherman has; `tests/unit/test_shared_validate.py`
+fails if a code has no key, or a key names a code that fisherman does not
+have. A frontend joins the prefix and the code, so it renders every key of
+the family. For a code with no line, or an empty one, the frontend shows
+fisherman's English `message`. `shared/recipe/README.md` says how a
+frontend asks.
 
 ### Install steps
 

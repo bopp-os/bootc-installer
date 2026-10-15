@@ -26,15 +26,18 @@ QtObject {
     function write(data) { written = data }
 
     // Canned backend output. Shapes match installer/main.go: `detect` returns
-    // offline facts, TPM and requirements; `discover-disks` returns the disks
+    // live facts, TPM and requirements (the harnesses set encryptionChoices
+    // from installer/encryption-choices.json); `validate` answers "valid";
+    // `discover-disks` returns the disks
     // fisherman's probe offers (installer/probe.go, ProbeDisk). The capture
     // harness replaces the disks with shared/probe/fixtures/laptop.expected.json.
     readonly property var fixtures: ({
         "detect": JSON.stringify({
+            isLive: false,
             liveImage: "",
+            offlineImages: [],
             hasTpm: true,
             unmet: [],
-            offlineStores: [],
             // What a branding.json on the docs product would yield; the
             // walkthrough is captured with this, not with the runner's
             // os-release.
@@ -43,6 +46,7 @@ QtObject {
                 defaultImage: "ghcr.io/tuna-os/albacore:gnome"
             }
         }),
+        "validate": JSON.stringify({ protocol_version: 1, valid: true, errors: [] }),
         "discover-disks": JSON.stringify([
             { path: "/dev/nvme0n1", title: "WD_BLACK SN850X 1000GB", model: "WD_BLACK SN850X 1000GB",
               size_label: "953.9 GiB", transport_label: "NVMe", removable: false }

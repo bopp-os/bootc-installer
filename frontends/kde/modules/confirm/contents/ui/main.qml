@@ -13,7 +13,9 @@ import org.tunaos.installer.components as TunaComponents
 TunaComponents.SetupModule {
     id: root
 
-    nextEnabled: InstallerController.disk.length > 0
+    // fisherman's hostname rule (`validate --json --partial`) holds Install
+    // while it reports a problem.
+    nextEnabled: InstallerController.disk.length > 0 && InstallerController.hostnameProblem === ""
 
     contentItem: ScrollView {
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
@@ -38,6 +40,17 @@ TunaComponents.SetupModule {
                 Layout.maximumWidth: root.cardWidth
                 Layout.alignment: Qt.AlignHCenter
                 Layout.bottomMargin: Kirigami.Units.largeSpacing
+            }
+
+            // fisherman's problem with the hostname, in the copy's words.
+            Kirigami.InlineMessage {
+                type: Kirigami.MessageType.Error
+                visible: text !== ""
+                text: InstallerController.hostnameProblem
+
+                Layout.fillWidth: true
+                Layout.maximumWidth: root.cardWidth
+                Layout.alignment: Qt.AlignHCenter
             }
 
             // The product's own lines (a quote, a tagline) from the branding

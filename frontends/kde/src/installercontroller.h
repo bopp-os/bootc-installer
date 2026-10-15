@@ -2,10 +2,9 @@
 
 // The wizard's state and the fisherman backend, exposed to QML.
 //
-// This is the old Wizard/QWidget page logic with the widgets removed: the
-// Recipe, the recipe file writing, the privileged fisherman QProcess and the
-// live-ISO/offline handling are unchanged — they just talk to QML properties
-// now instead of QLabels.
+// The wizard's recipe, the privileged fisherman QProcess (the recipe goes to
+// its stdin, `fisherman -`), and fisherman's answers: `probe --json` for the
+// hardware and live media, `validate --json --partial` for the fields.
 
 #include <QFile>
 #include <QObject>
@@ -17,13 +16,14 @@
 class QProcess;
 #endif
 #include <QString>
-#include <QTemporaryDir>
+#include <QTimer>
 #include <qqmlintegration.h>
 
 #include "branding.h"
 
 #include <QVariantMap>
 #include "recipe.h"
+#include "validate.h"
 
 class InstallerController : public QObject
 {
@@ -53,6 +53,19 @@ class InstallerController : public QObject
     // The encryption step repeats over it and hides the tpm2- ones without
     // a TPM; what each is called comes from encryptionLabel/Description.
     Q_PROPERTY(QStringList encryptionTypes READ encryptionTypes CONSTANT)
+
+    // fisherman's probe: the host booted from live media (live.is_live), and
+    // the booted image. On live media the recipe leaves `image` empty and
+    // fisherman installs the running system.
+    Q_PROPERTY(bool isLive READ isLive CONSTANT)
+    Q_PROPERTY(QString liveImage READ liveImage CONSTANT)
+
+    // fisherman's problems with the fields (`validate --json --partial`), in
+    // the words of the copy key validate_<code>; empty when there is none or
+    // the check could not run. The encryption step shows the passphrase
+    // problem and holds Next on it; the confirm step shows the hostname's.
+    Q_PROPERTY(QString hostnameProblem READ hostnameProblem NOTIFY problemsChanged)
+    Q_PROPERTY(QString encryptionProblem READ encryptionProblem NOTIFY problemsChanged)
 
     // The product name, resolved ONCE at startup from the branding contract
     // (src/branding.h: branding.json, then os-release, then neutral). Every
@@ -123,6 +136,16 @@ public:
     QStringList unmetRequirements() const { return m_unmet; }
     QString requirementsWarning() const;
     QStringList encryptionTypes() const { return Recipe::encryptionTypes(); }
+    Q_INVOKABLE bool needsPassphrase(const QString &type) const { return Recipe::needsPassphrase(type); }
+    Q_INVOKABLE bool needsTpm2(const QString &type) const { return Recipe::needsTpm2(type); }
+    bool isLive() const { return m_recipe.liveMode; }
+    QString liveImage() const { return m_liveImage; }
+    QString hostnameProblem() const { return problemText(QStringLiteral("hostname")); }
+    QString encryptionProblem() const { return problemText(QStringLiteral("encryption")); }
+    // The fields as a partial recipe for `validate --json --partial -`.
+    QByteArray partialRecipe() const;
+    // Takes in fisherman's answer (validate --json stdout). Public for tests.
+    void applyValidateAnswer(const QByteArray &stdoutData);
     QString productName() const { return m_productName; }
     QVariantMap copy() const { return m_branding.copyAsVariantMap(); }
     QString storeUrl() const { return m_branding.storeUrl; }
@@ -186,6 +209,7 @@ Q_SIGNALS:
     void installingChanged();
     void progressChanged();
     void recoveryChanged();
+    void problemsChanged();
     void installCompleted(int exitCode);
 
 private:
@@ -201,10 +225,18 @@ private:
     void resetProgress();
     void drainBuffer(QByteArray &buffer, const QString &prefix, bool parse);
     void fail(const QString &message);
+    // A problem's line: the copy for its code, or fisherman's message.
+    QString problemText(const QString &fieldPrefix) const;
+    // Asks fisherman about the fields after a pause in the changes.
+    void checkFields();
+    void runValidate();
 
     Recipe m_recipe;
-    QTemporaryDir m_recipeDir;
-    QString m_recipePath;
+    QString m_liveImage;
+    QList<validate::Problem> m_problems;
+    QTimer m_validateTimer;
+    QProcess *m_validateProcess = nullptr;
+    bool m_validateAgain = false;
     QString m_log;
     QFile *m_logFile = nullptr;
     QString m_logPath;

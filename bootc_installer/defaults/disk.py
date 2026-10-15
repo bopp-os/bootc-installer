@@ -35,6 +35,7 @@ from gi.repository import Adw, GLib, GObject, Gtk
 
 from bootc_installer.core.disks import DisksManager, Diskutils, Partition
 from bootc_installer.core.system import Systeminfo
+from bootc_installer.utils.field_check import FieldCheck
 from bootc_installer.defaults.disk_plan import (
     build_auto_partition_recipe,
     build_disk_finals,
@@ -767,6 +768,19 @@ class BootcDefaultDisk(Adw.Bin):
             self.__virtual_row = self.__build_virtual_disk_row()
             self.group_disks.add(self.__virtual_row)
 
+        # The hostname rule is fisherman's (`fisherman validate --json
+        # --partial -`). This page used to accept any text and only strip
+        # whitespace, so "my_pc" reached the installed /etc/hostname.
+        self.hostname_message = Gtk.Label(xalign=0, wrap=True, margin_top=6)
+        self.hostname_message.add_css_class("error")
+        hostname_group = self.hostname_entry.get_ancestor(Adw.PreferencesGroup)
+        if hostname_group is not None:
+            hostname_group.add(self.hostname_message)
+        self.hostname_check = FieldCheck(
+            window, self.hostname_entry, "hostname",
+            lambda text: {"hostname": text.strip()},
+            self.hostname_message, on_change=self.__on_hostname_checked)
+
         self.btn_next.connect("clicked", self.__on_btn_next_clicked)
         self.btn_auto.connect("clicked", self.__on_auto_clicked)
         self.btn_exit.connect("clicked", self.__on_btn_exit_clicked)
@@ -782,6 +796,10 @@ class BootcDefaultDisk(Adw.Bin):
         self.auto_select_single_disk()
 
         self.__check_battery()
+
+    def __on_hostname_checked(self):
+        self.__update_next_button()
+        self.__update_action_buttons()
 
     def __on_carousel_page_changed(self, carousel, idx):
         if carousel.get_nth_page(idx) is self:
@@ -920,8 +938,10 @@ class BootcDefaultDisk(Adw.Bin):
         self.__update_next_button()
 
     def __update_next_button(self):
-        """Enable Next only when a partition recipe exists and the fs tool is present."""
-        ok = self.__partition_recipe is not None and self.__fs_tool_ok
+        """Enable Next only when a partition recipe exists, the fs tool is
+        present and fisherman knows no problem with the hostname."""
+        ok = (self.__partition_recipe is not None and self.__fs_tool_ok
+              and self.hostname_check.ok)
         self.btn_next.set_visible(ok)
         self.btn_next.set_sensitive(ok)
 
@@ -1112,7 +1132,8 @@ class BootcDefaultDisk(Adw.Bin):
         self.confirm_partition_changes()
 
     def __update_action_buttons(self):
-        self.btn_auto.set_sensitive(len(self.__selected_disks) == 1)
+        self.btn_auto.set_sensitive(len(self.__selected_disks) == 1
+                                    and self.hostname_check.ok)
 
     def on_disk_entry_toggled(self, widget, disk):
         self.__use_virtual_disk = False

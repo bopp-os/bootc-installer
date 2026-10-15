@@ -155,25 +155,18 @@ class BootcWindow(Adw.ApplicationWindow):
         self.__reconnect_update_finals()
 
     def _is_offline_install(self) -> bool:
-        """Detect if this is an offline install (live ISO with baked image).
+        """Whether the image is already here, so no network is needed.
 
-        Offline installs have the container image pre-loaded on the ISO media,
-        so no network pull is needed during step 6 (bootc install). Detected by:
-        1. A local_imgref in the recipe (explicit offline source), OR
-        2. Running in live ISO mode and the booted image matches the target image
+        True for an explicit offline source in the recipe (local_imgref), or
+        when fisherman's probe says the host booted from live media
+        (`live.is_live`): an empty image then installs the running system.
+        This used to look for /run/ostree-booted, which every installed
+        ostree host has, so any bootc desktop counted as "offline".
         """
         recipe = self.recipe if hasattr(self, "recipe") else {}
         if recipe.get("local_imgref"):
             return True
-        # Check for live ISO indicators
-        in_flatpak = os.path.exists("/.flatpak-info")
-        etc = "/run/host/etc" if in_flatpak else "/etc"
-        live_flag = os.path.exists(f"{etc}/bootc-installer/live-iso-mode")
-        live_initramfs = os.path.exists("/run/initramfs/live")
-        ostree_booted = os.path.exists("/run/ostree-booted")
-        if live_flag or (not in_flatpak and (ostree_booted or live_initramfs)):
-            return True
-        return False
+        return Systeminfo.is_live()
 
     def __step_context(self, current_widget=None):
         context = {
@@ -181,7 +174,6 @@ class BootcWindow(Adw.ApplicationWindow):
             # fisherman's tpm.usable (shared/probe/README.md), never an
             # inline probe: this was once a third copy of the TPM check.
             "has_tpm2": Systeminfo.has_tpm2(),
-            "live_iso": not os.path.exists("/.flatpak-info") and os.path.exists("/run/ostree-booted"),
             "sys_recipe": self.recipe if hasattr(self, "recipe") else {},
             "leaf_count": getattr(self, "_image_leaf_count", 2),
             "disk_count": getattr(self, "_installable_disk_count", 2),
@@ -407,18 +399,24 @@ class BootcWindow(Adw.ApplicationWindow):
                 return True
         return False
 
-    def __recipe_uses_encryption(self, recipe_path: str) -> bool:
-        try:
-            with open(recipe_path) as recipe_file:
-                recipe = json.load(recipe_file)
-        except (OSError, json.JSONDecodeError) as exc:
-            logger.warning("Failed to inspect install recipe %s: %s", recipe_path, exc)
-            return False
-
-        encryption = recipe.get("encryption", {})
+    @staticmethod
+    def __recipe_uses_encryption(recipe: dict) -> bool:
+        encryption = recipe.get("encryption", {}) if isinstance(recipe, dict) else {}
         if not isinstance(encryption, dict):
             return False
-        return encryption.get("type", "none") != "none"
+        return encryption.get("type", "none") not in ("", "none")
+
+    @staticmethod
+    def _load_autoinstall_recipe(path: str):
+        """The --autoinstall recipe file, read here and handed to fisherman on
+        stdin like any other recipe. None when it cannot be read."""
+        try:
+            with open(path, encoding="utf-8") as recipe_file:
+                recipe = json.load(recipe_file)
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("Failed to read install recipe %s: %s", path, exc)
+            return None
+        return recipe if isinstance(recipe, dict) else None
 
     def __on_recovery_key_acknowledged(self, *args):
         self.__go_to_page(self.__view_done)
@@ -514,17 +512,19 @@ class BootcWindow(Adw.ApplicationWindow):
         """Called via GLib.idle_add when --autoinstall was passed.
 
         Navigates directly to the progress view and starts fisherman with the
-        pre-built recipe file, bypassing the entire wizard.
+        pre-built recipe, bypassing the entire wizard. The file is read here;
+        fisherman gets its content on stdin.
         """
         logger.info(f"Autoinstall: starting with recipe {self.__autoinstall_recipe}")
-        self.__install_is_encrypted = self.__recipe_uses_encryption(self.__autoinstall_recipe)
+        recipe = self._load_autoinstall_recipe(self.__autoinstall_recipe)
+        self.__install_is_encrypted = self.__recipe_uses_encryption(recipe or {})
         self.__install_recovery_key = ""
 
         progress_index = self.__find_page_index(self.__view_progress)
         if progress_index >= 0:
             page = self.carousel.get_nth_page(progress_index)
             self.carousel.scroll_to(page, False)
-        self.__view_progress.start(self.__autoinstall_recipe)
+        self.__view_progress.start(recipe)
         return False  # remove idle callback
 
     def next(self, widget=None, fn=None, *args):

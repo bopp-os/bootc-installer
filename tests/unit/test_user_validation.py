@@ -127,6 +127,8 @@ def _make_user_step(mod, *, fullname="", username="", password="", confirm=""):
         password_strength_row=_FakeRow(),
         password_strength_label=_FakeLabel(),
         btn_next=_FakeButton(),
+        # fisherman's answer for the username (FieldCheck); no problem known.
+        username_check=SimpleNamespace(ok=True),
     )
     for method_name in (
         "_BootcDefaultUsers__suggested_username",
@@ -185,11 +187,14 @@ class TestUsernameAutofillBehavior(unittest.TestCase):
 
 
 class TestUsernameValidation(unittest.TestCase):
-    def test_invalid_characters_mark_username_error_and_disable_next(self):
+    """The username rule is fisherman's (`validate --json --partial -`); the
+    page only requires that a name was typed."""
+
+    def test_a_problem_fisherman_reports_disables_next(self):
         with _import_user_module_fresh() as mod:
-            step = _make_user_step(mod, username="john@doe", password="Valid1!A", confirm="Valid1!A")
+            step = _make_user_step(mod, username="root", password="abc", confirm="abc")
+            step.username_check = SimpleNamespace(ok=False)
             step._BootcDefaultUsers__on_field_changed()
-            self.assertIn("error", step.username_entry.css_classes)
             self.assertFalse(step.btn_next.sensitive)
 
     def test_single_character_username_is_accepted(self):
@@ -199,12 +204,19 @@ class TestUsernameValidation(unittest.TestCase):
             self.assertNotIn("error", step.username_entry.css_classes)
             self.assertTrue(step.btn_next.sensitive)
 
-    def test_username_starting_with_number_is_rejected(self):
+    def test_an_empty_username_disables_next(self):
         with _import_user_module_fresh() as mod:
-            step = _make_user_step(mod, username="1user", password="abc", confirm="abc")
+            step = _make_user_step(mod, username="", password="abc", confirm="abc")
             step._BootcDefaultUsers__on_field_changed()
-            self.assertIn("error", step.username_entry.css_classes)
             self.assertFalse(step.btn_next.sensitive)
+
+    def test_the_page_carries_no_username_pattern(self):
+        import pathlib
+        src = (pathlib.Path(__file__).resolve().parents[2]
+               / "bootc_installer" / "defaults" / "user.py").read_text()
+        self.assertNotIn("[a-z_][a-z0-9_-]", src)
+        self.assertIn('FieldCheck(', src)
+        self.assertIn('"user.username"', src)
 
 
 class TestPasswordStrength(unittest.TestCase):

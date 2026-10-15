@@ -1,4 +1,6 @@
 #include "recipe.h"
+#include "encryption_choices.h"
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 
@@ -61,25 +63,59 @@ bool Recipe::isValid() const
     return validationError().isEmpty();
 }
 
+namespace {
+struct Choices {
+    QStringList types;
+    QHash<QString, QJsonObject> byType;
+};
+
+const Choices &choices()
+{
+    static const Choices c = [] {
+        Choices out;
+        const QJsonArray list = QJsonDocument::fromJson(QByteArray(kEncryptionChoicesJson))
+                                    .object()
+                                    .value(QLatin1String("choices"))
+                                    .toArray();
+        for (const QJsonValue &v : list) {
+            const QJsonObject o = v.toObject();
+            const QString type = o.value(QLatin1String("type")).toString();
+            out.types << type;
+            out.byType.insert(type, o);
+        }
+        return out;
+    }();
+    return c;
+}
+
+bool flag(const QString &type, const char *name)
+{
+    const QString key = type.isEmpty() ? QStringLiteral("none") : type;
+    return choices().byType.value(key).value(QLatin1String(name)).toBool();
+}
+}
+
 const QStringList &Recipe::encryptionTypes()
 {
-    static const QStringList types = {
-        QStringLiteral("none"), QStringLiteral("luks-passphrase"),
-        QStringLiteral("tpm2-luks"), QStringLiteral("tpm2-luks-passphrase")};
-    return types;
+    return choices().types;
+}
+
+bool Recipe::needsPassphrase(const QString &type)
+{
+    return flag(type, "needs_passphrase");
+}
+
+bool Recipe::needsTpm2(const QString &type)
+{
+    return flag(type, "needs_tpm2");
 }
 
 QString Recipe::validationError() const
 {
+    // The one thing the wizard checks itself: a disk was chosen. The image,
+    // hostname and encryption rules are fisherman's (`validate --json`); the
+    // install runs them before it touches a disk.
     if (disk.isEmpty())
         return QStringLiteral("No disk selected");
-    if (image.isEmpty() && !liveMode)
-        return QStringLiteral("No OS image specified");
-    if (hostname.isEmpty())
-        return QStringLiteral("Hostname is required");
-    if (!encryptionTypes().contains(encryption.type))
-        return QStringLiteral("Unknown encryption type: %1").arg(encryption.type);
-    if (encryption.type.endsWith(QLatin1String("passphrase")) && encryption.passphrase.isEmpty())
-        return QStringLiteral("Encryption passphrase is required");
     return {};
 }

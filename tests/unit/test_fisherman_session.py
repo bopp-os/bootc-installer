@@ -29,6 +29,11 @@ def _fake_popen(pid=4242, poll_sequence=(None, None, 0)):
     return proc
 
 
+# The recipe the session hands to fisherman on stdin; never a file.
+_RECIPE = {"disk": "/dev/vda", "hostname": "h",
+           "encryption": {"type": "luks-passphrase", "passphrase": "s3cret"}}
+
+
 class FishermanSessionLaunchTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
@@ -38,9 +43,8 @@ class FishermanSessionLaunchTests(unittest.TestCase):
 
     def _session(self, popen=None, in_flatpak=False):
         return FishermanSession(
-            os.path.join(self.tmp, "recipe.json"),
+            _RECIPE,
             in_flatpak=in_flatpak,
-            live_iso=False,
             stage_base=self.tmp,
             cache_dir=self.cache_dir,
             host_path=os.path.join(self.cache_dir, "fisherman"),
@@ -93,9 +97,8 @@ class FishermanSessionLogModeTests(unittest.TestCase):
 
     def _launch(self):
         session = FishermanSession(
-            os.path.join(self.tmp, "recipe.json"),
+            _RECIPE,
             in_flatpak=False,
-            live_iso=False,
             stage_base=self.tmp,
             cache_dir=self.cache_dir,
             host_path=os.path.join(self.cache_dir, "fisherman"),
@@ -158,9 +161,8 @@ class FishermanSessionPollTests(unittest.TestCase):
     def _launched_session(self, poll_sequence=(None, None, 0)):
         popen = lambda argv, **kw: _fake_popen(poll_sequence=poll_sequence)
         session = FishermanSession(
-            os.path.join(self.tmp, "recipe.json"),
+            _RECIPE,
             in_flatpak=False,
-            live_iso=False,
             stage_base=self.tmp,
             cache_dir=self.tmp,
             host_path=os.path.join(self.tmp, "fisherman"),
@@ -179,7 +181,7 @@ class FishermanSessionPollTests(unittest.TestCase):
         self.assertEqual(session.poll_process(), 0)
 
     def test_poll_process_without_launch_is_none(self):
-        session = FishermanSession(os.path.join(self.tmp, "recipe.json"))
+        session = FishermanSession(_RECIPE)
         self.assertIsNone(session.poll_process())
 
 
@@ -189,7 +191,7 @@ class FishermanSessionLogTailingTests(unittest.TestCase):
         self.addCleanup(__import__("shutil").rmtree, self.tmp, True)
         self.log_path = os.path.join(self.tmp, "fisherman-output.log")
         self.session = FishermanSession(
-            os.path.join(self.tmp, "recipe.json"),
+            _RECIPE,
             log_path=self.log_path,
             popen=lambda argv, **kw: _fake_popen(),
         )
@@ -247,12 +249,12 @@ class FishermanSessionTerminateAndCleanupTests(unittest.TestCase):
         self.addCleanup(__import__("shutil").rmtree, self.tmp, True)
 
     def test_terminate_without_launch_is_a_noop(self):
-        session = FishermanSession(os.path.join(self.tmp, "recipe.json"))
+        session = FishermanSession(_RECIPE)
         session.terminate()  # must not raise
 
     def test_terminate_skips_already_exited_process(self):
         session = FishermanSession(
-            os.path.join(self.tmp, "recipe.json"),
+            _RECIPE,
             popen=lambda argv, **kw: _fake_popen(poll_sequence=(0,)),
         )
         session.launch()
@@ -262,13 +264,13 @@ class FishermanSessionTerminateAndCleanupTests(unittest.TestCase):
 
     def test_launch_starts_the_wrapper_in_its_own_session(self):
         popen = MagicMock(side_effect=lambda argv, **kw: _fake_popen())
-        session = FishermanSession(os.path.join(self.tmp, "recipe.json"), popen=popen)
+        session = FishermanSession(_RECIPE, popen=popen)
         session.launch()
         self.assertIs(popen.call_args.kwargs.get("start_new_session"), True)
 
     def test_terminate_signals_the_wrappers_group_not_ours(self):
         session = FishermanSession(
-            os.path.join(self.tmp, "recipe.json"),
+            _RECIPE,
             popen=lambda argv, **kw: _fake_popen(pid=4242, poll_sequence=(None,)),
         )
         session.launch()
@@ -280,7 +282,7 @@ class FishermanSessionTerminateAndCleanupTests(unittest.TestCase):
 
     def test_terminate_falls_back_to_proc_terminate_if_killpg_fails(self):
         session = FishermanSession(
-            os.path.join(self.tmp, "recipe.json"),
+            _RECIPE,
             popen=lambda argv, **kw: _fake_popen(poll_sequence=(None,)),
         )
         session.launch()
@@ -291,7 +293,7 @@ class FishermanSessionTerminateAndCleanupTests(unittest.TestCase):
 
     def test_terminate_tolerates_a_wrapper_that_outlives_the_wait(self):
         session = FishermanSession(
-            os.path.join(self.tmp, "recipe.json"),
+            _RECIPE,
             popen=lambda argv, **kw: _fake_popen(poll_sequence=(None,)),
         )
         session.launch()
@@ -311,7 +313,7 @@ class FishermanSessionTerminateAndCleanupTests(unittest.TestCase):
             return_value=["sleep", "30"],
         ):
             session = FishermanSession(
-                os.path.join(self.tmp, "recipe.json"),
+                _RECIPE,
                 in_flatpak=False,
                 cache_dir=os.path.join(self.tmp, "cache"),
                 log_path=os.path.join(self.tmp, "cache", "fisherman-output.log"),
@@ -326,22 +328,71 @@ class FishermanSessionTerminateAndCleanupTests(unittest.TestCase):
         self.assertEqual(received, [])
         self.assertEqual(session.proc.returncode, -signal.SIGTERM)
 
-    def test_cleanup_recipe_file_removes_the_file(self):
-        recipe_path = os.path.join(self.tmp, "recipe.json")
-        with open(recipe_path, "w") as f:
-            f.write('{"hostname": "x"}')
-        session = FishermanSession(recipe_path)
-        session.cleanup_recipe_file()
-        self.assertFalse(os.path.exists(recipe_path))
-
-    def test_cleanup_recipe_file_missing_file_does_not_raise(self):
-        session = FishermanSession(os.path.join(self.tmp, "does-not-exist.json"))
-        session.cleanup_recipe_file()  # must not raise
-
-    def test_cleanup_recipe_file_empty_path_is_a_noop(self):
-        session = FishermanSession("")
-        session.cleanup_recipe_file()  # must not raise
+    def test_the_session_has_no_recipe_file_to_clean_up(self):
+        self.assertFalse(hasattr(FishermanSession, "cleanup_recipe_file"))
 
 
-if __name__ == "__main__":
-    unittest.main()
+class FishermanSessionStdinTests(unittest.TestCase):
+    """fisherman reads the recipe from stdin (`fisherman -`, fisherman#276):
+    the passphrase never touches the disk or argv."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, self.tmp, True)
+        self.cache_dir = os.path.join(self.tmp, "cache")
+
+    def _session(self, popen, **kw):
+        return FishermanSession(
+            _RECIPE, in_flatpak=False, stage_base=self.tmp, cache_dir=self.cache_dir,
+            host_path=os.path.join(self.cache_dir, "fisherman"),
+            log_path=os.path.join(self.cache_dir, "fisherman-output.log"),
+            popen=popen, **kw)
+
+    def test_the_recipe_is_written_to_stdin_and_closed(self):
+        popen = MagicMock(side_effect=lambda argv, **kw: _fake_popen())
+        session = self._session(popen)
+        argv = session.launch()
+        self.assertIs(popen.call_args.kwargs.get("stdin"), subprocess.PIPE)
+        written = session.proc.stdin.write.call_args.args[0]
+        self.assertEqual(__import__("json").loads(written), _RECIPE)
+        session.proc.stdin.close.assert_called_once()
+        self.assertIn(" - >", argv[-1])
+        self.assertNotIn("s3cret", " ".join(argv))
+
+    def test_no_file_holds_the_recipe(self):
+        session = self._session(lambda argv, **kw: _fake_popen())
+        session.launch()
+        for root, _dirs, files in os.walk(self.tmp):
+            for name in files:
+                with open(os.path.join(root, name), errors="replace") as fh:
+                    self.assertNotIn("s3cret", fh.read(), name)
+
+    def test_a_wrapper_that_already_died_is_not_an_exception(self):
+        def popen(argv, **kw):
+            proc = _fake_popen()
+            proc.stdin.write.side_effect = BrokenPipeError()
+            return proc
+        session = self._session(popen)
+        self.assertIsNotNone(session.launch())
+        session.proc.stdin.close.assert_called_once()
+
+    def test_a_real_wrapper_reads_the_recipe_on_stdin(self):
+        """The real bash wrapper, with the escalation replaced by `cat`:
+        what fisherman would read on stdin lands in the log."""
+        log = os.path.join(self.cache_dir, "fisherman-output.log")
+        with patch("bootc_installer.utils.fisherman_runner.build_argv",
+                   return_value=["bash", "-c", f'cat - >"{log}" 2>&1; exit $?']):
+            session = self._session(None)
+            session.launch()
+        self.assertEqual(session.proc.wait(timeout=10), 0)
+        with open(log) as fh:
+            self.assertEqual(__import__("json").load(fh), _RECIPE)
+
+    def test_live_media_uses_sudo_and_an_installed_host_pkexec(self):
+        argvs = {}
+        for use_sudo in (True, False):
+            popen = MagicMock(side_effect=lambda argv, **kw: _fake_popen())
+            self._session(popen, use_sudo=use_sudo).launch()
+            argvs[use_sudo] = popen.call_args.args[0][-1]
+        self.assertTrue(argvs[True].startswith("sudo /usr/local/bin/fisherman -"))
+        self.assertTrue(argvs[False].startswith("pkexec /usr/local/bin/fisherman -"))

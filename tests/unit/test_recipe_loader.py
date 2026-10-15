@@ -5,7 +5,7 @@ import os
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 # Add bootc_installer to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -139,18 +139,23 @@ class TestRecipeLoaderEnrich(unittest.TestCase):
     def set_recipe(self, data):
         self.loader._RecipeLoader__recipe = data
 
-    @patch("os.path.exists")
-    def test_normal_mode_keeps_image_step(self, mock_exists):
-        """In normal mode, image selection step should be retained."""
-        mock_exists.return_value = False  # not live ISO, no flatpak
-        self.loader._in_flatpak = False
+    @patch.object(RecipeLoader, "_host_live", return_value=(False, ""))
+    def test_normal_mode_keeps_image_step(self, _live):
+        """Not live media (fisherman's probe): the image step stays."""
         self.loader._RecipeLoader__enrich()
         self.assertIn("image", self.loader._RecipeLoader__recipe["steps"])
 
-    @patch("os.path.exists")
-    def test_live_iso_removes_image_step(self, mock_exists):
-        """In live ISO mode, image selection step should be removed."""
-        mock_exists.return_value = True  # simulate live ISO
+    @patch("os.path.exists", return_value=True)
+    @patch.object(RecipeLoader, "_host_live", return_value=(False, ""))
+    def test_ostree_booted_is_not_live_media(self, _live, _exists):
+        """/run/ostree-booted is on every installed ostree host; an installed
+        bootc desktop keeps its image step."""
+        self.loader._RecipeLoader__enrich()
+        self.assertIn("image", self.loader._RecipeLoader__recipe["steps"])
+
+    @patch.object(RecipeLoader, "_host_live", return_value=(True, "ghcr.io/x/live:1"))
+    def test_live_iso_removes_image_step(self, _live):
+        """On live media, the image selection step is removed."""
         self.set_recipe({
             "log_file": "/tmp/test.log",
             "distro_name": "Test OS",
@@ -160,27 +165,28 @@ class TestRecipeLoaderEnrich(unittest.TestCase):
         })
         self.loader._RecipeLoader__enrich()
         self.assertNotIn("image", self.loader._RecipeLoader__recipe["steps"])
+        # The configured image wins over the booted one.
+        self.assertEqual(self.loader._RecipeLoader__recipe["imgref"], "ghcr.io/test/image:latest")
 
-    @patch("os.path.exists")
-    @patch("subprocess.run")
-    def test_live_iso_detects_bootc_image(self, mock_run, mock_exists):
-        """In live ISO mode without imgref, should detect via bootc status."""
-        mock_exists.side_effect = lambda path: True
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout=json.dumps({"status": {"booted": {"image": {"image": {"image": "containers-storage:ghcr.io/test:latest"}}}}}),
-            stderr=""
-        )
+    @patch.object(RecipeLoader, "_host_live",
+           return_value=(True, "containers-storage:ghcr.io/test:latest"))
+    def test_live_iso_uses_the_probes_live_image(self, _live):
+        """Without an imgref, the booted image is fisherman's live.live_image."""
         self.loader._RecipeLoader__enrich()
         self.assertEqual(
             self.loader._RecipeLoader__recipe["imgref"],
             "containers-storage:ghcr.io/test:latest"
         )
 
-    @patch("os.path.exists")
-    def test_local_imgref_preserves_imgref(self, mock_exists):
+    @patch.object(RecipeLoader, "_host_live", return_value=(True, ""))
+    def test_live_without_an_image_name_installs_the_running_system(self, _live):
+        self.loader._RecipeLoader__enrich()
+        self.assertNotIn("imgref", self.loader._RecipeLoader__recipe)
+        self.assertNotIn("image", self.loader._RecipeLoader__recipe["steps"])
+
+    @patch.object(RecipeLoader, "_host_live", return_value=(True, "ghcr.io/x/live:1"))
+    def test_local_imgref_preserves_imgref(self, _live):
         """When local_imgref is set, imgref should stay as the remote tracking ref."""
-        mock_exists.return_value = True
         self.set_recipe({
             "log_file": "/tmp/test.log",
             "distro_name": "Test OS",
@@ -195,46 +201,8 @@ class TestRecipeLoaderEnrich(unittest.TestCase):
             "ghcr.io/test/remote:latest"
         )
 
-
-class TestRecipeLoaderDetectBootcImage(unittest.TestCase):
-    """Tests for RecipeLoader.__detect_local_bootc_image."""
-
-    def setUp(self):
-        self.loader = object.__new__(RecipeLoader)
-        self.loader._in_flatpak = False
-        self.loader._etc = "/etc"
-        self.loader.recipe_path = None
-
-    @patch("subprocess.run")
-    def test_detects_valid_image(self, mock_run):
-        """Should parse bootc status JSON and return the image ref."""
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout=json.dumps({
-                "status": {
-                    "booted": {
-                        "image": {"image": {"image": "ghcr.io/org/image:latest"}}
-                    }
-                }
-            }),
-            stderr=""
-        )
-        result = self.loader._RecipeLoader__detect_local_bootc_image()
-        self.assertEqual(result, "ghcr.io/org/image:latest")
-
-    @patch("subprocess.run")
-    def test_bootc_status_failure_returns_empty(self, mock_run):
-        """Should return empty string when bootc status fails."""
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="error")
-        result = self.loader._RecipeLoader__detect_local_bootc_image()
-        self.assertEqual(result, "")
-
-    @patch("subprocess.run")
-    def test_bootc_status_exception_returns_empty(self, mock_run):
-        """Should return empty string on exception."""
-        mock_run.side_effect = FileNotFoundError("bootc not found")
-        result = self.loader._RecipeLoader__detect_local_bootc_image()
-        self.assertEqual(result, "")
+    def test_the_loader_runs_no_bootc_status_of_its_own(self):
+        self.assertFalse(hasattr(RecipeLoader, "_RecipeLoader__detect_local_bootc_image"))
 
 
 class TestRecipeLoaderCustomRecipe(unittest.TestCase):

@@ -89,3 +89,55 @@ class ShimMatchesCurrentFisherman(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestShimReadsStdin(unittest.TestCase):
+    """Every frontend pipes the recipe to `fisherman -`; the shim must keep
+    what arrived on stdin and hand `validate --json --partial -` its stdin."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+        self.real = os.path.join(self.tmp, "fisherman.real")
+        with open(self.real, "w") as fh:
+            # Stands in for the fisherman built from the submodule: records
+            # its argv and stdin, and accepts everything.
+            fh.write("#!/bin/sh\n"
+                     f'echo "$@" >> {self.tmp}/real-argv\n'
+                     f'if [ "$*" != "${{*%-}}" ]; then cat > {self.tmp}/real-stdin; fi\n'
+                     'case "$*" in *--json*) echo \'{"protocol_version":1,"valid":true,"errors":[]}\';; esac\n'
+                     "exit 0\n")
+        os.chmod(self.real, 0o755)
+        self.env = dict(os.environ, TUNA_E2E_REAL=self.real, TUNA_E2E_DIR=self.tmp)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def run_shim(self, args, stdin):
+        import subprocess
+        return subprocess.run(["bash", SHIM, *args], input=stdin, env=self.env,
+                              capture_output=True, text=True, timeout=60, check=False)
+
+    def test_dash_reads_the_recipe_from_stdin(self):
+        recipe = json.dumps({"disk": "/dev/loop0", "hostname": "e2e", "image": "x"})
+        out = self.run_shim(["-"], recipe)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        with open(os.path.join(self.tmp, "recipe.json")) as fh:
+            self.assertEqual(fh.read(), recipe)
+        self.assertIn("recipe received on stdin", out.stdout)
+        self.assertIn('"type":"complete"', out.stdout)
+        with open(os.path.join(self.tmp, "real-argv")) as fh:
+            self.assertIn(f"validate {self.tmp}/recipe.json", fh.read())
+
+    def test_empty_stdin_is_fishermans_error(self):
+        out = self.run_shim(["-"], "")
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("loading recipe: recipe is empty", out.stdout)
+
+    def test_partial_validate_gets_its_stdin(self):
+        out = self.run_shim(["validate", "--json", "--partial", "-"], '{"hostname":"-x"}')
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn('"valid":true', out.stdout)
+        with open(os.path.join(self.tmp, "real-stdin")) as fh:
+            self.assertEqual(fh.read(), '{"hostname":"-x"}')

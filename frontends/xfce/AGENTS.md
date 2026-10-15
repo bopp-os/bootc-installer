@@ -22,7 +22,7 @@ Human docs: [`README.md`](README.md) (flow, offline behaviour, Flatpak),
 | Path | Lines | What |
 |---|---|---|
 | `tuna_installer_xfce/app.py` | ~557 | the wizard: screens, navigation, GTK wiring |
-| `tuna_installer_xfce/core.py` | ~244 | recipe construction, offline/live-ISO detection |
+| `tuna_installer_xfce/core.py` | ~400 | recipe construction, fisherman invocation, the probe's live and offline facts |
 | `tuna_installer_xfce/trawlline.py` | ~70 | the one piece of brand |
 | `tests/gui/` | | `capture-screens.py`, `parity_report.py` |
 
@@ -39,13 +39,16 @@ and it is GTK-free enough to reason about without a display.
 This trips people up because it works one way in development and another when
 packaged:
 
-- **Outside Flatpak:** `sudo /usr/local/bin/fisherman`
+- **Outside Flatpak:** `sudo /usr/local/bin/fisherman -`
 - **Inside Flatpak:** `flatpak-spawn --host bash -c 'pkexec
-  /usr/local/bin/fisherman "$1"; exit $?' -- <recipe>`, which requires the
+  /usr/local/bin/fisherman -; exit $?'`, which requires the
   polkit action for it to be installed **on the host** by the ISO build — not
   by this repo. The host bash is there so fisherman's parent is a process
   this frontend owns (fisherman cancels when its parent dies); the wrapper
   is started in its own process group (`app.spawn_fisherman`).
+
+Either way the recipe goes to fisherman on stdin: `spawn_fisherman` writes
+the JSON and closes the pipe. Nothing writes it to a file.
 
 A change to how the backend is launched has to work in both, and the Flatpak
 path can only really be exercised from a built Flatpak:
@@ -73,17 +76,25 @@ offers no disk. `tests/test_probe.py` renders the shared fixtures, and
 
 ## Offline and live-ISO installs
 
-`core.py` detects live-ISO mode via `bootc status`; an **empty `image` in the
-recipe means "install the running system"**, which is the offline path and not
-a missing value. It probes embedded OCI stores in this order:
+Live media and the offline images are fisherman's facts: `core.is_live()`,
+`core.live_image()` and `core.offline_images()` read the probe's `live` and
+`offline` sections. On live media an **empty `image` means "install the
+running system"**, which fisherman accepts only there. The recipe never
+carries `additionalImageStores`: fisherman exposes the host's offline
+stores itself. Do not look for either in this frontend; inside a Flatpak it
+sees the runtime's `/etc` and `/usr`, not the host's
+(`tests/unit/test_no_frontend_detection.py`).
 
-1. `/etc/tuna-installer/offline-stores`
-2. `$TUNA_OFFLINE_STORES`
-3. `/usr/share/tuna-installer/oci-store`
+## Validation is fisherman's
 
-and passes what it finds as `additionalImageStores`. If you change that
-probing, remember the live ISO has no network — a fallback that reaches for a
-registry is a broken install, not a slow one.
+The identity page sends the hostname and username, and the encryption page
+the encryption choice, passphrase and filesystem, to
+`fisherman validate --json --partial -` (`fisherman_validate.LiveCheck`, a
+byte-identical copy of `shared/recipe/fisherman_validate.py`). A problem
+shows under the field, worded by the copy key `validate_<code>`, and holds
+Next. The password and the passphrase confirmation are this frontend's
+rules. Encryption choices come from `encryption-choices.json`; branch on
+`core.needs_passphrase()` / `core.needs_tpm2()`, never on the type's name.
 
 ## Visual verification
 

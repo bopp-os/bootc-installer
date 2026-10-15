@@ -230,6 +230,20 @@ class Systeminfo:
         return f"gpu-{primary}-symbolic"
 
     @staticmethod
+    def is_live() -> bool:
+        """Whether the host booted from live media: fisherman's live.is_live.
+        Only then may the recipe leave `image` empty. False when the probe
+        failed, so an empty image is never sent blind."""
+        result = Systeminfo.probe()
+        return fisherman_probe.is_live(result) if result else False
+
+    @staticmethod
+    def live_image() -> str:
+        """The booted image ref on live media (live.live_image); "" otherwise."""
+        result = Systeminfo.probe()
+        return fisherman_probe.live_image(result) if result else ""
+
+    @staticmethod
     def has_tpm2() -> bool:
         """Whether a TPM 2.0 is usable, per fisherman's `tpm.usable`.
 

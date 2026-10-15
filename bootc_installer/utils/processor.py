@@ -18,7 +18,6 @@ import json
 import logging
 import os
 import re
-import tempfile
 
 from bootc_installer.utils import branding
 from bootc_installer.utils.sha512crypt import sha512_crypt
@@ -90,21 +89,20 @@ def _find_nvidia_imgref_for(imgref: str) -> str:
 
 class Processor:
     @staticmethod
-    def recipe_names_disk(recipe_path: str) -> bool:
-        """Whether the fisherman recipe at `recipe_path` names a target disk.
+    def recipe_names_disk(recipe: dict) -> bool:
+        """Whether the fisherman recipe names a target disk.
 
         The window checks this before starting fisherman: a recipe with an
         empty disk only fails inside fisherman, as "invalid recipe: disk is
         required", which a user cannot act on (#154).
         """
         try:
-            with open(recipe_path, encoding="utf-8") as fh:
-                return bool(str(json.load(fh).get("disk") or "").strip())
-        except (OSError, ValueError, AttributeError):
+            return bool(str(recipe.get("disk") or "").strip())
+        except AttributeError:
             return False
 
     @staticmethod
-    def gen_install_recipe(log_path: str, finals: list, sys_recipe: dict) -> str:
+    def gen_install_recipe(log_path: str, finals: list, sys_recipe: dict) -> dict:
         """Generate a fisherman recipe JSON from the UI's collected finals.
 
         Args:
@@ -113,7 +111,9 @@ class Processor:
             sys_recipe: the loaded system recipe (from /etc/bootcos-installer/recipe.json)
 
         Returns:
-            Path to a temporary JSON file containing the fisherman recipe.
+            The fisherman recipe. The caller hands it to fisherman on stdin
+            (`fisherman -`); it is never written to a file, because it holds
+            the LUKS passphrase and the user's password hash.
         """
         # Merge all finals dicts into one flat dict
         merged = {}
@@ -365,9 +365,10 @@ class Processor:
             recipe["slurp"] = merged["slurp"]
         # Easter egg: always attempt to rescue wallpapers from existing Windows installs
         recipe["slurpWallpapers"] = True
-        # Offline install: pass additional image stores from the ISO recipe
-        # (e.g. squashfs OCI store baked into the live media)
-        additional_stores = sys_recipe.get("additionalImageStores", [])
+        # Offline image stores: only when the ISO's recipe names them. Left
+        # out, fisherman exposes the stores it finds on the host itself
+        # (tuna-os/fisherman#276); [] would turn that off.
+        additional_stores = sys_recipe.get("additionalImageStores")
         if additional_stores:
             recipe["additionalImageStores"] = additional_stores
         var_disk = merged.get("var_disk")
@@ -379,26 +380,4 @@ class Processor:
 
         logger.info(f"Generated fisherman recipe: disk={disk_device}, image={image}, encryption={encryption_type}")
 
-        # In a Flatpak sandbox /tmp and /run/user/ are private and not visible on the host.
-        # With --filesystem=host, $HOME is shared. Use ~/.cache/bootc-installer/ so that
-        # flatpak-spawn --host can read the recipe file from the host side.
-        in_flatpak = os.path.exists("/.flatpak-info")
-        if in_flatpak:
-            cache_dir = os.path.join(os.environ.get("HOME", "/root"), ".cache", "bootc-installer")
-            os.makedirs(cache_dir, exist_ok=True)
-            tmp_dir = cache_dir
-        else:
-            tmp_dir = None
-
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix=".json",
-            prefix="bootc-recipe-",
-            dir=tmp_dir,
-            delete=False,
-        ) as f:
-            json.dump(recipe, f, indent=2)
-            recipe_path = f.name
-
-        logger.info(f"Fisherman recipe written to {recipe_path}")
-        return recipe_path
+        return recipe

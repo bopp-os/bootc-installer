@@ -22,19 +22,19 @@ import org.tunaos.installer.components as TunaComponents
 TunaComponents.SetupModule {
     id: root
 
-    readonly property bool needsPassphrase: InstallerController.encryptionType.endsWith("passphrase")
-    readonly property bool passphrasesMatch: passphraseField.text.length > 0
-        && passphraseField.text === confirmField.text
+    // needs_passphrase from encryption-choices.json, not the type's name.
+    readonly property bool needsPassphrase: InstallerController.needsPassphrase(InstallerController.encryptionType)
+    readonly property bool passphrasesMatch: passphraseField.text === confirmField.text
 
-    // Recipe::validationError() rejects a *-passphrase type with an empty or
-    // mismatched passphrase; catching it here means the user finds out while
-    // they can still fix it, instead of as an opaque failure mid-install.
-    nextEnabled: !needsPassphrase || passphrasesMatch
+    // fisherman's rules (an empty passphrase, `validate --json --partial`)
+    // and this page's (the confirmation matches) both hold Next, so the user
+    // finds out while they can still fix it, not mid-install.
+    nextEnabled: InstallerController.encryptionProblem === "" && (!needsPassphrase || passphrasesMatch)
 
-    // Keep the recipe in step with the fields, but never leave a passphrase in
-    // it for a type that does not take one.
+    // Keep the recipe in step with the field fisherman checks, but never
+    // leave a passphrase in it for a type that does not take one.
     function commitPassphrase(): void {
-        InstallerController.passphrase = (needsPassphrase && passphrasesMatch) ? passphraseField.text : "";
+        InstallerController.passphrase = needsPassphrase ? passphraseField.text : "";
     }
 
     contentItem: ScrollView {
@@ -71,7 +71,7 @@ TunaComponents.SetupModule {
                     delegate: FormCard.FormRadioDelegate {
                         required property string modelData
 
-                        visible: !modelData.startsWith("tpm2") || InstallerController.hasTpm
+                        visible: !InstallerController.needsTpm2(modelData) || InstallerController.hasTpm
                         text: InstallerController.encryptionLabel(modelData)
                         description: InstallerController.encryptionDescription(modelData)
                         checked: InstallerController.encryptionType === modelData
@@ -113,6 +113,17 @@ TunaComponents.SetupModule {
 
                     onTextChanged: root.commitPassphrase()
                 }
+            }
+
+            // fisherman's problem with the choice, in the copy's words.
+            Kirigami.InlineMessage {
+                type: Kirigami.MessageType.Error
+                visible: text !== ""
+                text: InstallerController.encryptionProblem
+
+                Layout.fillWidth: true
+                Layout.maximumWidth: root.cardWidth
+                Layout.alignment: Qt.AlignHCenter
             }
         }
     }

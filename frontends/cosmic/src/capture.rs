@@ -30,8 +30,6 @@ use std::path::PathBuf;
 
 use crate::{Page, TunaInstaller};
 
-pub const FIXTURE_LIVE_IMAGE: &str = "ghcr.io/tuna-os/albacore:gnome";
-
 /// Rows occupied by the COSMIC header bar, excluded from the pixel audit.
 /// Comfortably taller than the bar itself — the point is to be certain no
 /// chrome leaks into the measurement, not to measure the bar precisely.

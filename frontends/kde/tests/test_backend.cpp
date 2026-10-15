@@ -6,6 +6,7 @@
 #include "installercontroller.h"
 #include "probe.h"
 #include "diskmodel.h"
+#include "validate.h"
 
 #include <QDir>
 #include <QFile>
@@ -78,8 +79,11 @@ private slots:
 
     // The wrapper runs pkexec under a host bash and leads its own process
     // group, the shared cancel contract.
-    void flatpakWrapperPassesOutputAndStatusThrough();
+    void flatpakWrapperPassesStdinOutputAndStatusThrough();
     void wrapperLeadsItsOwnProcessGroup();
+    void validateAnswersBecomeCopyLines();
+    void validateSendsAPartialRecipeOnStdin();
+    void liveMediaComesFromTheProbe();
 };
 
 void BackendTest::recipeDefaults()
@@ -100,9 +104,9 @@ void BackendTest::recipeJsonOmitsOptionalValues()
     const QJsonObject json = Recipe{}.toJson();
 
     // "image" is not one of the optional keys for a normal install: fisherman
-    // is always handed it, and validationError() rejects an empty image before
-    // a recipe can be sent. Only live-ISO mode may omit it — see the liveMode
-    // branch in Recipe::toJson() and INSTALLER-FRONTENDS.md 4.
+    // is always handed it, and rejects an empty one off live media
+    // (image_required). Only on live media (probe's live.is_live) may it be
+    // omitted — see the liveMode branch in Recipe::toJson().
     QVERIFY(json.contains(QStringLiteral("image")));
 
     Recipe live;
@@ -160,10 +164,13 @@ void BackendTest::recipeValidation_data()
     QTest::newRow("valid-image") << "/dev/vda" << "example/image" << false << "tunaos" << "none" << "" << "";
     QTest::newRow("valid-live") << "/dev/vda" << "" << true << "tunaos" << "none" << "" << "";
     QTest::newRow("missing-disk") << "" << "example/image" << false << "tunaos" << "none" << "" << "No disk selected";
-    QTest::newRow("missing-image") << "/dev/vda" << "" << false << "tunaos" << "none" << "" << "No OS image specified";
-    QTest::newRow("missing-hostname") << "/dev/vda" << "example/image" << false << "" << "none" << "" << "Hostname is required";
-    QTest::newRow("unknown-encryption") << "/dev/vda" << "example/image" << false << "tunaos" << "plain" << "" << "Unknown encryption type: plain";
-    QTest::newRow("missing-passphrase") << "/dev/vda" << "example/image" << false << "tunaos" << "luks-passphrase" << "" << "Encryption passphrase is required";
+    // The image, hostname and encryption rules are fisherman's
+    // (`validate --json`, the install runs them before touching a disk):
+    // this frontend no longer keeps a copy of them.
+    QTest::newRow("image-is-fishermans") << "/dev/vda" << "" << false << "tunaos" << "none" << "" << "";
+    QTest::newRow("hostname-is-fishermans") << "/dev/vda" << "example/image" << false << "" << "none" << "" << "";
+    QTest::newRow("encryption-is-fishermans") << "/dev/vda" << "example/image" << false << "tunaos" << "plain" << "" << "";
+    QTest::newRow("passphrase-is-fishermans") << "/dev/vda" << "example/image" << false << "tunaos" << "luks-passphrase" << "" << "";
     QTest::newRow("valid-passphrase") << "/dev/vda" << "example/image" << false << "tunaos" << "luks-passphrase" << "secret" << "";
 }
 
@@ -300,10 +307,16 @@ void BackendTest::brandingFixtures()
 
 void BackendTest::encryptionChoicesReadTheCopyLayer()
 {
-    // The ids and their order are the enum of the shared recipe schema.
+    // The ids and their order are fisherman's encryption-choices.json,
+    // compiled in from frontends/kde/encryption-choices.json.
     const QStringList types = {QStringLiteral("none"), QStringLiteral("luks-passphrase"),
                                QStringLiteral("tpm2-luks"), QStringLiteral("tpm2-luks-passphrase")};
     QCOMPARE(Recipe::encryptionTypes(), types);
+    QVERIFY(Recipe::needsPassphrase(QStringLiteral("tpm2-luks-passphrase")));
+    QVERIFY(!Recipe::needsPassphrase(QStringLiteral("tpm2-luks")));
+    QVERIFY(!Recipe::needsPassphrase(QString()));
+    QVERIFY(Recipe::needsTpm2(QStringLiteral("tpm2-luks")));
+    QVERIFY(!Recipe::needsTpm2(QStringLiteral("luks-passphrase")));
 
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
@@ -363,13 +376,14 @@ void BackendTest::offlineCommandHelpers()
     // Flatpak: pkexec inside a host bash, so fisherman's parent is a process
     // this frontend owns (fisherman cancels when its parent dies). Not
     // `flatpak-spawn --host pkexec`, whose parent is the session helper.
+    // `-`: the recipe goes on stdin (fisherman#276), never as a path.
     QCOMPARE(offline::fishermanCommand(true),
              (QStringList{QStringLiteral("flatpak-spawn"), QStringLiteral("--host"),
                           QStringLiteral("bash"), QStringLiteral("-c"),
-                          QStringLiteral("pkexec /usr/local/bin/fisherman \"$1\"; exit $?"),
-                          QStringLiteral("--")}));
+                          QStringLiteral("pkexec /usr/local/bin/fisherman -; exit $?")}));
     QCOMPARE(offline::fishermanCommand(false),
-             (QStringList{QStringLiteral("sudo"), QStringLiteral("/usr/local/bin/fisherman")}));
+             (QStringList{QStringLiteral("sudo"), QStringLiteral("/usr/local/bin/fisherman"),
+                          QStringLiteral("-")}));
 
     if (offline::inFlatpak()) {
         QCOMPARE(hostWrapped.first(), QStringLiteral("flatpak-spawn"));
@@ -820,26 +834,26 @@ void BackendTest::streamsKeepSeparatePartialLines()
     QVERIFY(!log.contains(QStringLiteral("\"type\"")));
 }
 
-void BackendTest::flatpakWrapperPassesOutputAndStatusThrough()
+void BackendTest::flatpakWrapperPassesStdinOutputAndStatusThrough()
 {
 #if !QT_CONFIG(process)
     QSKIP("QProcess is not available on this platform (wasm)");
 #else
     // Run the wrapper's bash for real (everything after flatpak-spawn
-    // --host) with pkexec stubbed on PATH, and a recipe path a shell would
-    // act on if it were interpolated into the script.
+    // --host) with pkexec stubbed on PATH: what is written to the wrapper's
+    // stdin is what fisherman reads, and `-` is its argument.
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const QString stub = dir.filePath(QStringLiteral("pkexec"));
+    const QString seen = dir.filePath(QStringLiteral("stdin"));
     QFile f(stub);
     QVERIFY(f.open(QIODevice::WriteOnly));
-    f.write("#!/bin/sh\nprintf '%s|%s\\n' \"$1\" \"$2\"\necho to-stderr >&2\nexit 7\n");
+    f.write("#!/bin/sh\nprintf '%s|%s\\n' \"$1\" \"$2\"\ncat > \"" + seen.toUtf8()
+            + "\"\necho to-stderr >&2\nexit 7\n");
     f.close();
     f.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
 
     QStringList cmd = offline::fishermanCommand(true);
-    const QString recipe = dir.filePath(QStringLiteral("a b $(touch pwned) ;x.json"));
-    cmd << recipe;
     cmd.removeFirst(); // flatpak-spawn
     cmd.removeFirst(); // --host
 
@@ -849,13 +863,96 @@ void BackendTest::flatpakWrapperPassesOutputAndStatusThrough()
     p.setProcessEnvironment(env);
     p.setWorkingDirectory(dir.path());
     p.start(cmd.takeFirst(), cmd);
+    const QByteArray recipe = R"({"encryption":{"type":"luks-passphrase","passphrase":"s3cret"}})";
+    p.write(recipe);
+    p.closeWriteChannel();
     QVERIFY(p.waitForFinished(10000));
     QCOMPARE(p.exitCode(), 7);
-    QCOMPARE(QString::fromUtf8(p.readAllStandardOutput()),
-             QStringLiteral("/usr/local/bin/fisherman|") + recipe + QLatin1Char('\n'));
+    QCOMPARE(QString::fromUtf8(p.readAllStandardOutput()), QStringLiteral("/usr/local/bin/fisherman|-\n"));
     QCOMPARE(p.readAllStandardError(), QByteArray("to-stderr\n"));
-    QVERIFY(!QFile::exists(dir.filePath(QStringLiteral("pwned"))));
+    QFile got(seen);
+    QVERIFY(got.open(QIODevice::ReadOnly));
+    QCOMPARE(got.readAll(), recipe);
 #endif
+}
+
+void BackendTest::validateAnswersBecomeCopyLines()
+{
+#ifndef VALIDATE_GOLDENS_DIR
+    QSKIP("no goldens");
+#else
+    const QString dir = QStringLiteral(VALIDATE_GOLDENS_DIR);
+    QFile golden(dir + QStringLiteral("/partial-hostname.golden"));
+    if (!golden.open(QIODevice::ReadOnly))
+        QSKIP("the fisherman submodule is not checked out");
+    const QByteArray answer = golden.readAll();
+    const validate::Result r = validate::parse(answer);
+    QVERIFY(r.ok);
+    QCOMPARE(r.problems.size(), 1);
+    QCOMPARE(r.problems.first().code, QStringLiteral("hostname_label_hyphen"));
+
+    InstallerController c;
+    QVERIFY(c.hostnameProblem().isEmpty());
+    c.applyValidateAnswer(answer);
+    QCOMPARE(c.hostnameProblem(), c.text(QStringLiteral("validate_hostname_label_hyphen")));
+    QVERIFY(!c.hostnameProblem().isEmpty());
+    QVERIFY(c.encryptionProblem().isEmpty());
+
+    // An unknown code shows fisherman's message; no answer clears it.
+    c.applyValidateAnswer(R"({"protocol_version":1,"valid":false,"errors":[{"field":"encryption.passphrase","code":"brand_new","message":"say why"}]})");
+    QCOMPARE(c.encryptionProblem(), QStringLiteral("say why"));
+    c.applyValidateAnswer("not json");
+    QVERIFY(c.encryptionProblem().isEmpty());
+    QVERIFY(!validate::parse(R"({"protocol_version":2,"errors":[]})").ok);
+#endif
+}
+
+void BackendTest::validateSendsAPartialRecipeOnStdin()
+{
+    QCOMPARE(validate::command(false),
+             (QStringList{QStringLiteral("/usr/local/bin/fisherman"), QStringLiteral("validate"),
+                          QStringLiteral("--json"), QStringLiteral("--partial"), QStringLiteral("-")}));
+    QCOMPARE(validate::command(true).mid(0, 2),
+             (QStringList{QStringLiteral("flatpak-spawn"), QStringLiteral("--host")}));
+    InstallerController c;
+    c.setHostname(QStringLiteral("box"));
+    c.setEncryptionType(QStringLiteral("tpm2-luks"));
+    QJsonObject partial = QJsonDocument::fromJson(c.partialRecipe()).object();
+    QCOMPARE(partial.value(QStringLiteral("hostname")).toString(), QStringLiteral("box"));
+    QVERIFY(!partial.value(QStringLiteral("encryption")).toObject().contains(QStringLiteral("passphrase")));
+    c.setEncryptionType(QStringLiteral("luks-passphrase"));
+    c.setPassphrase(QStringLiteral("s3cret"));
+    partial = QJsonDocument::fromJson(c.partialRecipe()).object();
+    QCOMPARE(partial.value(QStringLiteral("encryption")).toObject().value(QStringLiteral("passphrase")).toString(),
+             QStringLiteral("s3cret"));
+}
+
+void BackendTest::liveMediaComesFromTheProbe()
+{
+    const QString dir = QStringLiteral(PROBE_FIXTURES_DIR);
+    for (const QString &name : {QStringLiteral("laptop"), QStringLiteral("container"), QStringLiteral("vm")}) {
+        QFile in(dir + QLatin1Char('/') + name + QStringLiteral(".json"));
+        QFile want(dir + QLatin1Char('/') + name + QStringLiteral(".expected.json"));
+        if (!in.open(QIODevice::ReadOnly) || !want.open(QIODevice::ReadOnly))
+            QSKIP("shared/probe/fixtures is absent");
+        const probe::Result r = probe::parse(in.readAll());
+        const QJsonObject expected = QJsonDocument::fromJson(want.readAll()).object();
+        QCOMPARE(r.liveImage, expected.value(QStringLiteral("live_image")).toString());
+        QStringList images;
+        for (const QJsonValue &v : expected.value(QStringLiteral("offline_images")).toArray())
+            images << v.toString();
+        QCOMPARE(r.offlineImages, images);
+        QCOMPARE(r.isLive, name != QStringLiteral("container"));
+    }
+    // The controller takes it in: the laptop booted from live media.
+    qputenv("BOOTC_INSTALLER_FAKE_PROBE", (dir + QStringLiteral("/laptop.json")).toUtf8());
+    InstallerController live;
+    qputenv("BOOTC_INSTALLER_FAKE_PROBE", (dir + QStringLiteral("/container.json")).toUtf8());
+    InstallerController installed;
+    qunsetenv("BOOTC_INSTALLER_FAKE_PROBE");
+    QVERIFY(live.isLive());
+    QCOMPARE(live.liveImage(), QStringLiteral("ghcr.io/example/os:stable"));
+    QVERIFY(!installed.isLive());
 }
 
 void BackendTest::wrapperLeadsItsOwnProcessGroup()

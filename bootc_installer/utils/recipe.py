@@ -17,13 +17,20 @@
 import json
 import logging
 import os
-import subprocess
 import sys
 from gettext import gettext as _
 
 from bootc_installer.utils import branding
 
 logger = logging.getLogger("Installer::RecipeLoader")
+
+
+def _host_live():
+    """(is_live, live_image) from fisherman's probe (`live`), the one answer
+    every frontend uses (shared/probe/README.md). Not live when the probe
+    failed."""
+    from bootc_installer.core.system import Systeminfo
+    return Systeminfo.is_live(), Systeminfo.live_image()
 
 
 class RecipeLoader:
@@ -44,6 +51,9 @@ class RecipeLoader:
         ]
 
     recipe_path = None
+
+    # Where live-media facts come from; a seam for tests.
+    _host_live = staticmethod(_host_live)
 
     def __init__(self):
         self.__recipe = {}
@@ -142,65 +152,43 @@ class RecipeLoader:
         logger.info("Branding: %s (%s)", r["distro_name"], b.source)
 
     def __enrich(self):
-        """Post-load enrichment: detect live ISO mode and inject local bootc image."""
-        is_ostree_booted = os.path.exists("/run/ostree-booted")
-        # Also detect squashfs-based live ISOs (dracut dmsquash-live) which do not
-        # set /run/ostree-booted because they are not ostree deployments.
-        is_live_squashfs = os.path.exists("/run/initramfs/live")
-        # A live ISO builder can drop a flag file at /etc/bootc-installer/live-iso-mode
-        # to explicitly activate live ISO mode.  This is the only reliable signal when
-        # the installer runs inside a Flatpak sandbox (where /.flatpak-info exists and
-        # /run/initramfs/live or /run/ostree-booted may be inaccessible).
-        is_live_flagged = os.path.exists(f"{self._etc}/bootc-installer/live-iso-mode")
-        live_iso_mode = is_live_flagged or (not self._in_flatpak and (is_ostree_booted or is_live_squashfs))
+        """Post-load enrichment: on live media, install the configured image
+        (or the running one) without an image step.
 
-        if live_iso_mode:
-            # local_imgref is an optional override for the install *source* used only
-            # in live ISO mode (e.g. "containers-storage:ghcr.io/org/image:tag" for
-            # offline installs from a pre-populated squashfs).  imgref always remains
-            # the remote tracking reference written into the installed system.
-            if not self.__recipe.get("local_imgref"):
-                imgref = self.__recipe.get("imgref", "") or self.__detect_local_bootc_image()
-                if imgref:
-                    logger.info(f"Live ISO mode: using local bootc image {imgref}")
-                    self.__recipe["imgref"] = imgref
-                else:
-                    logger.warning("Live ISO mode: could not detect local bootc image")
+        Live media is fisherman's answer (probe's live.is_live). This used to
+        be decided here from /run/ostree-booted, /run/initramfs/live and a
+        flag file, read inside the Flatpak sandbox; /run/ostree-booted is on
+        every installed ostree host, so a bootc desktop lost its image step.
+        The booted image came from `bootc status`, which the probe now runs on
+        the host.
+        """
+        live, live_image = self._host_live()
+        if not live:
+            logger.info("Not live media: image selection enabled")
+            return
+
+        # local_imgref is an optional override for the install *source* used only
+        # on live media (e.g. "containers-storage:ghcr.io/org/image:tag" for
+        # offline installs from a pre-populated squashfs).  imgref always remains
+        # the remote tracking reference written into the installed system.
+        if not self.__recipe.get("local_imgref"):
+            imgref = self.__recipe.get("imgref", "") or live_image
+            if imgref:
+                logger.info(f"Live media: using bootc image {imgref}")
+                self.__recipe["imgref"] = imgref
             else:
-                logger.info(
-                    f"Live ISO mode: local_imgref override present "
-                    f"({self.__recipe['local_imgref']}), imgref stays as remote tracking ref"
-                )
-
-            # Remove the image selection step — use the configured image silently
-            self.__recipe["steps"].pop("image", None)
-            logger.info("Live ISO mode: image selection step removed")
+                # Nothing names the image: an empty image installs the
+                # running system, which fisherman accepts on live media.
+                logger.warning("Live media: no image named; installing the running system")
         else:
-            logger.info("Flatpak/normal mode: image selection enabled")
-
-    def __detect_local_bootc_image(self) -> str:
-        """Run bootc status to find the currently booted image reference."""
-        try:
-            result = subprocess.run(
-                ["bootc", "status", "--format", "json"],
-                capture_output=True, text=True, timeout=10
+            logger.info(
+                f"Live media: local_imgref override present "
+                f"({self.__recipe['local_imgref']}), imgref stays as remote tracking ref"
             )
-            if result.returncode == 0:
-                data = json.loads(result.stdout)
-                # bootc status JSON: .status.booted.image.image.image
-                imgref = (
-                    data.get("status", {})
-                        .get("booted", {})
-                        .get("image", {})
-                        .get("image", {})
-                        .get("image", "")
-                )
-                if imgref:
-                    logger.info(f"Detected local bootc image via bootc status: {imgref}")
-                    return imgref
-        except Exception as e:
-            logger.warning(f"bootc status failed: {e}")
-        return ""
+
+        # Remove the image selection step — use the configured image silently
+        self.__recipe["steps"].pop("image", None)
+        logger.info("Live media: image selection step removed")
 
     def __validate(self):
         # distro_name/distro_logo are no longer essential: __apply_branding fills

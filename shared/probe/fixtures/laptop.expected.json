@@ -34,5 +34,11 @@
     }
   ],
   "tpm_usable": true,
-  "unmet": []
+  "unmet": [],
+  "live_image": "ghcr.io/example/os:stable",
+  "offline_images": [
+    "ghcr.io/example/os:stable",
+    "ghcr.io/example/os:beta",
+    "localhost/os:beta"
+  ]
 }

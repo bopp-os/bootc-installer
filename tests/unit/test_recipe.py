@@ -174,19 +174,20 @@ class TestNoRecipeFallback(unittest.TestCase):
 
 class TestLiveISOEnrich(unittest.TestCase):
     def _load_live(self, recipe, extra_exists=None):
-        """Load RecipeLoader with live ISO signals active."""
+        """Load RecipeLoader on a host fisherman's probe calls live media."""
         recipe_with_image = {**recipe, "steps": {**recipe.get("steps", {}), "image": {"label": "Image"}}}
 
         def _exists(path):
-            # Simulate /run/ostree-booted and recipe file present, no flatpak
             if extra_exists and path in extra_exists:
                 return extra_exists[path]
-            return path in ("/fake/recipe.json", "/run/ostree-booted")
+            return path == "/fake/recipe.json"
 
         env = {"BOOTC_CUSTOM_RECIPE": "/fake/recipe.json"}
         with patch.dict(os.environ, env, clear=False), \
              patch("bootc_installer.utils.recipe.os.path.exists", side_effect=_exists), \
              patch("builtins.open", mock_open(read_data=json.dumps(recipe_with_image))), \
+             patch.object(RecipeLoader, "_host_live",
+                   return_value=(True, "ghcr.io/testorg/booted:live")), \
              patch("bootc_installer.utils.recipe.RecipeLoader._in_flatpak", False):
             return RecipeLoader()
 
@@ -214,12 +215,13 @@ class TestLiveISOEnrich(unittest.TestCase):
         env = {"BOOTC_CUSTOM_RECIPE": "/fake/recipe.json"}
 
         def _exists(path):
-            # No live ISO signals
-            return path == "/fake/recipe.json"
+            # /run/ostree-booted is on every installed ostree host: not live.
+            return path in ("/fake/recipe.json", "/run/ostree-booted")
 
         with patch.dict(os.environ, env, clear=False), \
              patch("bootc_installer.utils.recipe.os.path.exists", side_effect=_exists), \
              patch("builtins.open", mock_open(read_data=json.dumps(recipe))), \
+             patch.object(RecipeLoader, "_host_live", return_value=(False, "")), \
              patch("bootc_installer.utils.recipe.RecipeLoader._in_flatpak", False):
             loader = RecipeLoader()
         self.assertIn("image", loader.raw.get("steps", {}))

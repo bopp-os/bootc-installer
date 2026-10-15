@@ -486,11 +486,9 @@ class TestEndToEnd:
         hostname_finals = {"hostname": "ci-test-host"}
 
         all_finals = [image_finals, disk_finals, enc_finals, hostname_finals]
-        path = Processor.gen_install_recipe("/dev/null", all_finals, _SYS_RECIPE)
-        assert os.path.exists(path)
-
-        with open(path) as f:
-            recipe = json.load(f)
+        recipe = Processor.gen_install_recipe("/dev/null", all_finals, _SYS_RECIPE)
+        # The recipe goes to `fisherman -` on stdin; no file is written.
+        assert isinstance(recipe, dict)
 
         # Core sanity checks.
         assert recipe["disk"] == "/dev/vda"
@@ -517,10 +515,9 @@ class TestEndToEnd:
         hostname_finals = {"hostname": "manual-host"}
 
         all_finals = [image_finals, disk_finals, enc_finals, hostname_finals]
-        path = Processor.gen_install_recipe("/dev/null", all_finals, _SYS_RECIPE)
+        recipe = Processor.gen_install_recipe("/dev/null", all_finals, _SYS_RECIPE)
 
-        with open(path) as f:
-            recipe = json.load(f)
+
 
         assert "customMounts" in recipe
         mounts_by_target = {m["target"]: m for m in recipe["customMounts"]}
@@ -539,11 +536,10 @@ class TestEndToEnd:
         enc_finals  = {"encryption": {"use_encryption": False}}
         host_finals = {"hostname": "cf-host"}
 
-        path = Processor.gen_install_recipe("/dev/null",
+        recipe = Processor.gen_install_recipe("/dev/null",
                                             [image_finals, disk_finals, enc_finals, host_finals],
                                             _SYS_RECIPE)
-        with open(path) as f:
-            recipe = json.load(f)
+
 
         assert recipe["composeFsBackend"] is True
 
@@ -559,11 +555,10 @@ class TestEndToEnd:
         }}
         host_finals = {"hostname": "enc-host"}
 
-        path = Processor.gen_install_recipe("/dev/null",
+        recipe = Processor.gen_install_recipe("/dev/null",
                                             [image_finals, disk_finals, enc_finals, host_finals],
                                             _SYS_RECIPE)
-        with open(path) as f:
-            recipe = json.load(f)
+
 
         assert recipe["encryption"]["type"] == "luks-passphrase"
         assert recipe["encryption"]["passphrase"] == "t3st-key"

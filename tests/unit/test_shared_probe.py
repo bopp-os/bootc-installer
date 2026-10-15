@@ -188,8 +188,23 @@ class TestReader(unittest.TestCase):
                         "disks": self.fp.render_disks(result),
                         "tpm_usable": self.fp.tpm_usable(result),
                         "unmet": self.fp.unmet_requirements(result),
+                        "live_image": self.fp.live_image(result),
+                        "offline_images": self.fp.offline_images(result),
                     },
                     _expected(name))
+
+    def test_live_and_offline_facts(self):
+        laptop = self.fp.parse(json.dumps(_fixture("laptop")))
+        self.assertTrue(self.fp.is_live(laptop))
+        self.assertEqual(self.fp.live_image(laptop), "ghcr.io/example/os:stable")
+        self.assertIn("localhost/os:beta", self.fp.offline_images(laptop))
+        container = self.fp.parse(json.dumps(_fixture("container")))
+        self.assertFalse(self.fp.is_live(container))
+        self.assertEqual(self.fp.live_image(container), "")
+        # A live_image is only ever reported for live media.
+        odd = {"live": {"is_live": False, "live_image": "x"}}
+        self.assertEqual(self.fp.live_image(odd), "")
+        self.assertEqual(self.fp.offline_images({}), [])
 
     def test_the_expected_renderings_cover_what_drifted(self):
         laptop = _expected("laptop")

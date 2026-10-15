@@ -11,8 +11,9 @@
     },
     "filesystem": {
       "type": "string",
-      "enum": ["xfs", "btrfs"],
-      "default": "xfs"
+      "enum": ["xfs", "ext4", "btrfs", "zfs"],
+      "default": "xfs",
+      "description": "Root filesystem of the automatic layout: fisherman's recipe.Filesystems (fisherman/docs/VALIDATE.md)"
     },
     "btrfsSubvolumes": {
       "type": "boolean",
@@ -78,7 +79,7 @@
     "additionalImageStores": {
       "type": "array",
       "items": {"type": "string"},
-      "description": "Local OCI stores available during an offline install"
+      "description": "Local OCI stores available during an offline install. Leave it out and fisherman exposes the stores it finds on the host (the ones `fisherman probe --json` lists under offline.stores); [] turns that discovery off. Frontends write it only when the ISO's recipe names stores explicitly."
     },
     "distroID": {
       "type": "string",
@@ -92,8 +93,9 @@
     },
     "hostname": {
       "type": "string",
-      "pattern": "^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$",
-      "description": "Hostname for the installed system"
+      "maxLength": 64,
+      "pattern": "^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$",
+      "description": "Hostname for the installed system: at most 64 characters of dot-separated RFC 1123 labels, each 1-63 letters, digits and hyphens, not starting or ending with a hyphen. fisherman's rule (CheckHostname); fisherman/docs/VALIDATE.md lists the error codes."
     },
     "unifiedStorage": {
       "type": "boolean",
@@ -127,7 +129,9 @@
       "description": "Account to create. An empty username skips the step.",
       "properties": {
         "username": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^([a-z_][a-z0-9_-]{0,31})?$",
+          "description": "Empty skips user creation. Otherwise ^[a-z_][a-z0-9_-]{0,31}$ and not a reserved system name (fisherman's CheckUsername; fisherman/docs/VALIDATE.md)."
         },
         "fullname": {
           "type": "string"

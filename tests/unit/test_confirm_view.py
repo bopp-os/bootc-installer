@@ -32,6 +32,14 @@ def _build_gi_stubs():
     gtk_mod = types.ModuleType("gi.repository.Gtk")
     gtk_mod.Template = _Template()
     gtk_mod.Box = _StubBase
+    # The hostname row's fisherman-validate message line.
+    gtk_mod.Label = lambda *a, **kw: MagicMock()
+
+    # FieldCheck schedules its checks with GLib; nothing runs them here.
+    glib_mod = types.ModuleType("gi.repository.GLib")
+    glib_mod.timeout_add = lambda ms, fn: 1
+    glib_mod.source_remove = lambda source: None
+    glib_mod.idle_add = lambda fn, *a: None
 
     adw_mod = types.ModuleType("gi.repository.Adw")
     adw_mod.Bin = _StubBase
@@ -67,6 +75,7 @@ def _build_gi_stubs():
         ("Gtk", gtk_mod),
         ("Adw", adw_mod),
         ("GObject", gobject_mod),
+        ("GLib", glib_mod),
     ]:
         setattr(repo_mod, name, mod)
         sys.modules[f"gi.repository.{name}"] = mod

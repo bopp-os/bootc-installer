@@ -51,12 +51,18 @@ set(BACKEND_SOURCES
     src/probe.h
     src/readiness.cpp
     src/readiness.h
+    src/validate.cpp
+    src/validate.h
 )
 
 # copy-defaults.json compiled into branding.cpp as a raw string literal. The
 # file is a byte-identical copy of shared/branding/copy-defaults.json.
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/copy-defaults.json" TUNA_COPY_DEFAULTS_JSON)
 configure_file(src/branding_defaults.h.in "${CMAKE_CURRENT_BINARY_DIR}/branding_defaults.h" @ONLY)
+# encryption-choices.json compiled into recipe.cpp the same way: a
+# byte-identical copy of fisherman's data/encryption-choices.json.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/encryption-choices.json" TUNA_ENCRYPTION_CHOICES_JSON)
+configure_file(src/encryption_choices.h.in "${CMAKE_CURRENT_BINARY_DIR}/encryption_choices.h" @ONLY)
 
 # The whole UI lives in a static library so that both the installer and the
 # screenshot harness link the *same* QML module — registering one URI from two
@@ -136,6 +142,7 @@ if(BUILD_TESTING)
         src/offline.cpp
         src/readiness.cpp
         src/probe.cpp
+        src/validate.cpp
         src/diskmodel.cpp
         # For the fisherman progress protocol parse. The controller's other
         # halves (QProcess, the recipe file) are not exercised here; the
@@ -149,7 +156,8 @@ if(BUILD_TESTING)
     target_compile_definitions(tuna-installer-backend-tests PRIVATE
         BRANDING_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../shared/branding/fixtures"
         PROBE_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../shared/probe/fixtures"
-        PROGRESS_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../shared/progress")
+        PROGRESS_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../shared/progress"
+        VALIDATE_GOLDENS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../fisherman/fisherman/cmd/fisherman/testdata/validate")
     # Qt6::Quick is needed to compile readiness.cpp: armStamp() takes a
     # QQuickWindow, so the type must be complete even though the tests below
     # only exercise writeStamp(), which has no Quick dependency of its own.

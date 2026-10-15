@@ -4,8 +4,9 @@
     check-recipe.py <frontend> [recipe.json]   (default /tmp/tuna-e2e/recipe.json)
 
 Independent verdicts, all required:
-  * the REAL fisherman accepts it (`fisherman validate`, the same Validate()
-    an install runs first);
+  * the REAL fisherman accepts it (`fisherman validate --json -`, the same
+    rules an install runs before it touches a disk), and each problem is
+    reported with its stable code;
   * it conforms to shared/recipe/fisherman-recipe.schema.json, the contract
     the five frontends write against;
   * it targets the disk the job set up, so a frontend that picked the wrong
@@ -37,10 +38,25 @@ def main():
 
     failures = []
 
-    r = subprocess.run([REAL, "validate", path], capture_output=True, text=True, check=False)
-    print(f"fisherman validate -> exit {r.returncode}: {(r.stdout + r.stderr).strip()}")
-    if r.returncode != 0:
-        failures.append("the real fisherman rejected the recipe")
+    # `validate --json -`: every problem, with its stable code, from the
+    # rules the install runs before it touches a disk. The recipe goes on
+    # stdin, the way the frontends hand it over.
+    with open(path, "rb") as fh:
+        r = subprocess.run([REAL, "validate", "--json", "-"], stdin=fh,
+                           capture_output=True, text=True, check=False)
+    print(f"fisherman validate --json -> exit {r.returncode}")
+    try:
+        verdict = json.loads(r.stdout)
+    except ValueError:
+        verdict = None
+    if r.returncode not in (0, 1) or not isinstance(verdict, dict):
+        failures.append(f"fisherman validate --json failed: {(r.stdout + r.stderr).strip()}")
+    else:
+        for problem in verdict.get("errors") or []:
+            failures.append(f"fisherman: {problem.get('field') or '<recipe>'}: "
+                            f"{problem.get('code')}: {problem.get('message')}")
+        if verdict.get("valid"):
+            print("fisherman validate: ok")
 
     try:
         import jsonschema

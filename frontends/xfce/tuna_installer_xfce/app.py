@@ -1,7 +1,6 @@
 """Application composition and install-process orchestration."""
 
 import os
-import shutil
 import signal
 
 import gi
@@ -24,8 +23,9 @@ from .pages import (
 from .trawlline import TrawlLine
 
 
-def spawn_fisherman(argv):
-    """Start the fisherman wrapper as the leader of its own process group.
+def spawn_fisherman(argv, stdin_data=b""):
+    """Start the fisherman wrapper as the leader of its own process group,
+    and hand it the recipe on stdin.
 
     The wrapper (flatpak-spawn, or sudo) is the only process in the install
     this user can signal; fisherman runs as root and cancels when its parent
@@ -34,12 +34,27 @@ def spawn_fisherman(argv):
     of its own rather than the installer's. This frontend has no cancel UI,
     so nothing signals it yet.
 
+    fisherman reads the recipe from stdin (`fisherman -`, #276) until EOF:
+    `stdin_data` is written and the pipe closed here. A recipe is a few KiB,
+    well under a pipe's buffer, so this does not wait for the polkit prompt.
+    No file ever holds the passphrase or the user password.
+
     Returns (pid, stdout_fd, stderr_fd); the caller reaps the pid.
     """
     flags = GLib.SpawnFlags.SEARCH_PATH | GLib.SpawnFlags.DO_NOT_REAP_CHILD
-    pid, _in, out, err = GLib.spawn_async(
+    pid, stdin_fd, out, err = GLib.spawn_async(
         argv, flags=flags, child_setup=os.setpgrp,
-        standard_output=True, standard_error=True)
+        standard_input=True, standard_output=True, standard_error=True)
+    try:
+        view = memoryview(stdin_data)
+        while view:
+            written = os.write(stdin_fd, view)
+            view = view[written:]
+    except OSError:
+        # The wrapper is already gone; its exit status says why.
+        pass
+    finally:
+        os.close(stdin_fd)
     return pid, out, err
 
 
@@ -119,7 +134,7 @@ class InstallerWindow(Gtk.ApplicationWindow):
 
     def build_recipe(self):
         """Read page widgets and adapt their values to the core recipe API."""
-        src, setup = self.pages["source"], self.pages["setup"]
+        setup = self.pages["setup"]
         leaf = self.selected_leaf()
         disk = self.pages["destination"].selected_disk()
         identity = self.pages["identity"]
@@ -134,7 +149,6 @@ class InstallerWindow(Gtk.ApplicationWindow):
             bootloader=leaf.bootloader if leaf else "",
             composefs=leaf.composefs if leaf else False,
             flatpaks=leaf.flatpaks if leaf else "",
-            stores=src.stores,
             needs_user=self.needs_user_creation(),
             username=identity.username.get_text(),
             fullname=identity.fullname.get_text(),
@@ -146,19 +160,20 @@ class InstallerWindow(Gtk.ApplicationWindow):
             self._start_dry_run(progress_page)
             return
 
-        recipe_path = core.write_recipe(self.build_recipe())
-        argv = core.fisherman_argv(recipe_path)
+        recipe = self.build_recipe()
+        argv = core.fisherman_argv()
         self._log_tail = []
         self._install_log = core.open_install_log()
-        self._install_log.write(f"=== install started: {core.fisherman_shell(recipe_path)} ===\n")
+        self._install_log.write(
+            f"=== install started: {core.fisherman_shell()} (recipe on stdin) ===\n")
         self._install_log.flush()
-        pid, out, err = spawn_fisherman(argv)
+        pid, out, err = spawn_fisherman(argv, core.recipe_stdin(recipe))
         for fd in (out, err):
             channel = GLib.IOChannel.unix_new(fd)
             channel.set_flags(GLib.IOFlags.NONBLOCK)
             GLib.io_add_watch(channel, GLib.IO_IN | GLib.IO_HUP,
                               self._on_output, progress_page)
-        GLib.child_watch_add(pid, self._on_exit, recipe_path)
+        GLib.child_watch_add(pid, self._on_exit)
 
     def _start_dry_run(self, progress_page):
         """Play a fisherman transcript through the real progress page."""
@@ -190,9 +205,8 @@ class InstallerWindow(Gtk.ApplicationWindow):
                 page.append_log(text)
         return not (cond & GLib.IO_HUP)
 
-    def _on_exit(self, pid, status, recipe_path):
+    def _on_exit(self, pid, status, *_):
         GLib.spawn_close_pid(pid)
-        shutil.rmtree(core.recipe_dir(recipe_path), ignore_errors=True)
         ok = os.WIFEXITED(status) and os.WEXITSTATUS(status) == 0
         if self._install_log:
             outcome = "ok" if ok else f"failed (status {status})"

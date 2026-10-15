@@ -23,10 +23,13 @@
 # Layout (created by setup.sh):
 #   /usr/local/lib/tuna-e2e/fisherman.real   the binary built from fisherman/
 #   /tmp/tuna-e2e/                           1777; recipe.json lands here
+#                                            (read from stdin for `fisherman -`)
 #   /tmp/tuna-e2e/probe.json                 the `probe --json` answer
 set -u
-REAL=/usr/local/lib/tuna-e2e/fisherman.real
-DIR=/tmp/tuna-e2e
+# Overridable only so tests/unit/test_e2e_shim.py can run the shim without
+# root; the frontends reach it through sudo/pkexec, which reset the env.
+REAL=${TUNA_E2E_REAL:-/usr/local/lib/tuna-e2e/fisherman.real}
+DIR=${TUNA_E2E_DIR:-/tmp/tuna-e2e}
 
 case "${1:-}" in
   probe)
@@ -40,17 +43,32 @@ case "${1:-}" in
     exec cat "$DIR/probe.json"
     ;;
   validate|images|scan|--help|-h|"")
+    # The real fisherman, stdin included: `validate --json --partial -` is
+    # what the frontends run while the user types (fisherman/docs/VALIDATE.md).
     exec "$REAL" "$@"
     ;;
 esac
 
-RECIPE="$1"
 mkdir -p "$DIR"
-# Keep the recipe exactly as the frontend wrote it. The frontends delete
-# their private copy the moment this process exits.
-cp "$RECIPE" "$DIR/recipe.json"
-chmod 0644 "$DIR/recipe.json"
-echo "[e2e] recipe received: $RECIPE ($(wc -c < "$RECIPE") bytes)"
+# Keep the recipe exactly as the frontend wrote it. Every frontend now pipes
+# it on stdin (`fisherman -`, tuna-os/fisherman#276) and writes no file; a
+# path argument is still accepted, as the real fisherman accepts one.
+if [ "$1" = "-" ]; then
+  cat > "$DIR/recipe.json"
+  SOURCE=stdin
+else
+  cp "$1" "$DIR/recipe.json"
+  SOURCE="$1"
+fi
+RECIPE="$DIR/recipe.json"
+chmod 0644 "$RECIPE"
+echo "[e2e] recipe received on $SOURCE ($(wc -c < "$RECIPE") bytes)"
+if [ ! -s "$RECIPE" ]; then
+  # What the real fisherman says to empty stdin, as its one event.
+  printf '{"type":"error","message":"loading recipe: recipe is empty","elapsed_ms":0,"timestamp":"%s"}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  exit 1
+fi
 
 if ! "$REAL" validate "$RECIPE"; then
   echo "[e2e] the real fisherman rejected this recipe" >&2

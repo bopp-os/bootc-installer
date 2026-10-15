@@ -67,8 +67,9 @@ def test_progress_note_is_shown():
 
 
 def test_live_row_carries_the_install_subtitle(monkeypatch):
-    monkeypatch.setattr(core, "live_iso_image", lambda: "ghcr.io/example/live:1")
-    monkeypatch.setattr(core, "offline_stores", lambda: [])
+    monkeypatch.setattr(core, "is_live", lambda: True)
+    monkeypatch.setattr(core, "live_image", lambda: "ghcr.io/example/live:1")
+    monkeypatch.setattr(core, "offline_images", lambda: set())
     monkeypatch.setattr(core, "load_catalog", lambda: (None, None, []))
     page = pages.SourcePage(_Win())
     texts = []

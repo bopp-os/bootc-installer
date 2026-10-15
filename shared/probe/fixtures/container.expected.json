@@ -3,5 +3,7 @@
   "tpm_usable": false,
   "unmet": [
     "uefi"
-  ]
+  ],
+  "live_image": "",
+  "offline_images": []
 }

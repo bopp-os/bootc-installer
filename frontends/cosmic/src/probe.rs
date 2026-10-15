@@ -31,6 +31,15 @@ pub struct Facts {
     pub tpm_usable: bool,
     /// fisherman's `system.unmet`: "ram", "cpu", "uefi".
     pub unmet: Vec<String>,
+    /// `live.is_live`: the host booted from live media. Only then may the
+    /// recipe leave `image` empty, which installs the running system.
+    pub is_live: bool,
+    /// `live.live_image` when live (the booted image), else "".
+    pub live_image: String,
+    /// `offline.images`: image refs in the host's offline stores. The stores
+    /// are fisherman's: a recipe that leaves additionalImageStores out gets
+    /// them.
+    pub offline_images: Vec<String>,
 }
 
 /// Parses probe output.
@@ -83,10 +92,24 @@ pub fn parse(json: &str) -> Result<Facts, String> {
                 .collect()
         })
         .unwrap_or_default();
+    let is_live = root.pointer("/live/is_live").and_then(|v| v.as_bool()).unwrap_or(false);
+    let live_image = if is_live {
+        root.pointer("/live/live_image").and_then(|v| v.as_str()).unwrap_or("").to_string()
+    } else {
+        String::new()
+    };
+    let offline_images = root
+        .pointer("/offline/images")
+        .and_then(|u| u.as_array())
+        .map(|a| a.iter().filter_map(|s| s.as_str().map(str::to_string)).collect())
+        .unwrap_or_default();
     Ok(Facts {
         disks,
         tpm_usable,
         unmet,
+        is_live,
+        live_image,
+        offline_images,
     })
 }
 
@@ -214,6 +237,12 @@ mod tests {
             assert_eq!(serde_json::Value::Array(got), want["disks"], "{name}: disks");
             assert_eq!(serde_json::json!(facts.tpm_usable), want["tpm_usable"], "{name}: tpm");
             assert_eq!(serde_json::json!(facts.unmet), want["unmet"], "{name}: unmet");
+            assert_eq!(serde_json::json!(facts.live_image), want["live_image"], "{name}: live image");
+            assert_eq!(
+                serde_json::json!(facts.offline_images),
+                want["offline_images"],
+                "{name}: offline images"
+            );
         }
     }
 

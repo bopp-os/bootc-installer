@@ -69,8 +69,10 @@ Steps: welcome → disk → encryption → confirm → progress → done.
 install process. Three rules from [`DESIGN.md`](DESIGN.md) are safety
 properties, not preferences:
 
-- **The recipe can contain a LUKS passphrase.** It must never be logged or
-  retained; the controller removes the temp recipe when the process exits.
+- **The recipe can contain a LUKS passphrase.** It must never be logged,
+  retained or written to a file. The controller runs `fisherman -` and
+  writes the JSON to the process's stdin, then closes it
+  (`../../shared/recipe/README.md`).
 - **The confirmation screen is the destructive-action boundary.** Back
   navigation is disabled once `fisherman` starts.
 - **The progress module advances to "finished" only after the process exits** —
@@ -80,9 +82,22 @@ The recipe schema is shared with the other frontends
 (`fisherman-recipe.schema.json`, and the
 [installer frontend contract](https://github.com/tuna-os/tunaos/blob/main/docs/INSTALLER-FRONTENDS.md)).
 A field added here must exist there too, or the sibling installers diverge.
-Encryption types: `none`, `luks-passphrase`, `tpm2-luks`,
-`tpm2-luks-passphrase`. On a live ISO `image` may be omitted, and bootc
-installs the running container offline.
+Encryption types come from `encryption-choices.json`, a byte-identical
+copy of fisherman's file compiled into `recipe.cpp`; branch on
+`Recipe::needsPassphrase()` / `needsTpm2()`, never on the type's name. On
+live media (the probe's `live.is_live`, `InstallerController.isLive`)
+`image` is left out and fisherman installs the running system. Never fill
+`additionalImageStores`: fisherman exposes the host's offline stores.
+
+## Validation is fisherman's
+
+The hostname, filesystem and encryption rules are `fisherman validate
+--json --partial -` (`src/validate.{h,cpp}`). The controller sends those
+fields on stdin 300 ms after a change and exposes `hostnameProblem` and
+`encryptionProblem`, worded by the copy key `validate_<code>`. The
+encryption step shows its problem and holds Next on it; the confirm step
+shows the hostname's. Only the passphrase confirmation is a rule of this
+frontend. Do not add a rule of your own to `Recipe::validationError()`.
 
 ## Disks, TPM and minimum requirements
 

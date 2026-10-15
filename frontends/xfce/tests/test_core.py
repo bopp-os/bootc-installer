@@ -1,8 +1,8 @@
 # test_core.py - Unit tests for tuna_installer_xfce.core (backend plumbing)
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# core.py is the shared backend (catalog, disks, offline stores, recipe
-# emission, fisherman invocation) and is pure stdlib — no GTK import — so
+# core.py is the shared backend (catalog, disks, live and offline facts,
+# recipe emission, fisherman invocation) and is pure stdlib — no GTK import — so
 # these tests run headlessly in plain pytest.
 
 import json
@@ -55,54 +55,48 @@ class TestBranding:
         assert "tuna" not in b.name.lower() and "bluefin" not in b.name.lower()
 
 
-# ─── offline stores ──────────────────────────────────────────────────────────
+# ─── live media and offline images: fisherman's facts ────────────────────────
 
-class TestOfflineStores:
-    def test_env_and_default_dedup_and_dir_filter(self, tmp_path, monkeypatch):
-        a = tmp_path / "store-a"
-        b = tmp_path / "store-b"
-        a.mkdir()
-        b.mkdir()
-        not_a_dir = tmp_path / "plain-file"
-        not_a_dir.write_text("x")
-        monkeypatch.setenv("TUNA_OFFLINE_STORES", f"{a}:{b}:{not_a_dir}:{a}")
-        monkeypatch.setattr(core, "OFFLINE_STORES_FILE", str(tmp_path / "absent"))
-        monkeypatch.setattr(core, "OFFLINE_STORE_DEFAULT", str(tmp_path / "default-missing"))
-        stores = core.offline_stores()
-        assert stores == [str(a), str(b)]
-
-    def test_config_file_entries(self, tmp_path, monkeypatch):
-        a = tmp_path / "from-file"
-        a.mkdir()
-        cfg = tmp_path / "offline-stores"
-        cfg.write_text(f"# comment\n\n{a}\n\n")
-        monkeypatch.delenv("TUNA_OFFLINE_STORES", raising=False)
-        monkeypatch.setattr(core, "OFFLINE_STORES_FILE", str(cfg))
-        monkeypatch.setattr(core, "OFFLINE_STORE_DEFAULT", str(tmp_path / "default-missing"))
-        assert core.offline_stores() == [str(a)]
+FIXTURES = os.path.join(os.path.dirname(__file__), "..", "..", "..", "shared", "probe", "fixtures")
 
 
-# ─── host commands / catalog ─────────────────────────────────────────────────
+def _probe_from(monkeypatch, name):
+    monkeypatch.setenv("BOOTC_INSTALLER_FAKE_PROBE", os.path.join(FIXTURES, name + ".json"))
+    core.probe(refresh=True)
 
-class TestOfflineImages:
-    def test_parses_names_and_skips_failures(self, monkeypatch):
-        fake = subprocess.CompletedProcess(
-            args=[], returncode=0,
-            stdout=json.dumps([{"Names": ["localhost/one:latest", "localhost/two:1.0"]},
-                               {"Names": None}]),
-            stderr="")
-        monkeypatch.setattr(core, "host_run", lambda argv, **kw: fake)
-        assert core.offline_images(["store-a", "store-b"]) == {"localhost/one:latest", "localhost/two:1.0"}
 
-    def test_nonzero_returncode_yields_empty(self, monkeypatch):
-        fake = subprocess.CompletedProcess(args=[], returncode=1, stdout="boom", stderr="")
-        monkeypatch.setattr(core, "host_run", lambda argv, **kw: fake)
-        assert core.offline_images(["store"]) == set()
+class TestLiveAndOffline:
+    """probe's `live` and `offline` sections, read through the shared reader
+    (shared/probe/README.md). No bootc status, /proc/cmdline, store list or
+    podman here: inside a Flatpak they saw the runtime, not the host."""
 
-    def test_invalid_json_yields_empty(self, monkeypatch):
-        fake = subprocess.CompletedProcess(args=[], returncode=0, stdout="not json", stderr="")
-        monkeypatch.setattr(core, "host_run", lambda argv, **kw: fake)
-        assert core.offline_images(["store"]) == set()
+    def teardown_method(self):
+        core._probe_cache.clear()
+
+    def test_live_laptop(self, monkeypatch):
+        _probe_from(monkeypatch, "laptop")
+        expected = json.load(open(os.path.join(FIXTURES, "laptop.expected.json")))
+        assert core.is_live()
+        assert core.live_image() == expected["live_image"]
+        assert core.offline_images() == set(expected["offline_images"])
+
+    def test_installed_container_is_not_live(self, monkeypatch):
+        _probe_from(monkeypatch, "container")
+        assert not core.is_live()
+        assert core.live_image() == ""
+        assert core.offline_images() == set()
+
+    def test_a_failed_probe_is_not_live(self, monkeypatch):
+        monkeypatch.setenv("BOOTC_INSTALLER_FAKE_PROBE", "/nonexistent/probe.json")
+        core.probe(refresh=True)
+        assert not core.is_live()
+        assert core.offline_images() == set()
+
+    def test_no_detection_of_its_own(self):
+        src = open(core.__file__).read()
+        for gone in ("live_iso_image", "offline_stores", '"podman"', "rd.live.image",
+                     "/run/ostree-live", "TUNA_OFFLINE_STORES"):
+            assert gone not in src, gone
 
 
 class TestImageNode:
@@ -244,9 +238,10 @@ class TestBuildRecipe:
 
     # --- offline stores ---
 
-    def test_stores_passed_when_detected(self):
-        r = core.build_recipe(**MINIMAL, stores=["/run/media/iso/containers"])
-        assert r["additionalImageStores"] == ["/run/media/iso/containers"]
+    def test_stores_are_left_to_fisherman(self):
+        """Absent, fisherman exposes the host's offline stores itself."""
+        r = core.build_recipe(**MINIMAL)
+        assert "additionalImageStores" not in r
 
     # --- user block ---
 
@@ -270,115 +265,74 @@ class TestBuildRecipe:
 
     # --- round trip ---
 
-    def test_recipe_survives_write_recipe(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    def test_recipe_survives_the_stdin_encoding(self):
         built = core.build_recipe(**MINIMAL, encryption_type="luks-passphrase",
-                                  passphrase="pw", stores=["/a"],
-                                  needs_user=True, username="jo")
-        assert json.load(open(core.write_recipe(built))) == built
+                                  passphrase="pw", needs_user=True, username="jo")
+        assert json.loads(core.recipe_stdin(built)) == built
 
 
-# ─── recipe writing ──────────────────────────────────────────────────────────
-
-class TestWriteRecipe:
-    def test_writes_0600_json_under_runtime_dir(self, tmp_path, monkeypatch):
-        import stat
-        monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
-        path = core.write_recipe({"image": "localhost/foo:1"})
-        assert path.startswith(str(tmp_path / "tuna-installer-"))
-        mode = stat.S_IMODE(os.stat(path).st_mode)
-        assert mode == 0o600, f"recipe must be 0600, got {oct(mode)}"
-        assert json.load(open(path)) == {"image": "localhost/foo:1"}
-
-    def test_falls_back_to_tmp_without_runtime_dir(self, monkeypatch):
-        import stat
-        monkeypatch.delenv("XDG_RUNTIME_DIR", raising=False)
-        path = core.write_recipe({"x": 1})
-        assert json.load(open(path)) == {"x": 1}
-        assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
-
-    def test_directory_is_private(self, tmp_path, monkeypatch):
-        """0700, so nobody else can enumerate or replace the recipe.
-
-        The file mode was never the weak part — mkstemp already gave an
-        unpredictable 0600 file. The directory was: a fixed
-        <base>/tuna-installer created with exist_ok=True inherited whatever
-        mode a pre-existing directory had, and the path is what gets handed
-        to root's fisherman."""
-        import stat
-        monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
-        rundir = core.recipe_dir(core.write_recipe({"x": 1}))
-        assert stat.S_IMODE(os.stat(rundir).st_mode) == 0o700
-
-    def test_directory_is_not_reused(self, tmp_path, monkeypatch):
-        """A fresh directory per call — never a fixed name a local user can
-        pre-create and then own."""
-        monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
-        first = core.recipe_dir(core.write_recipe({"x": 1}))
-        second = core.recipe_dir(core.write_recipe({"x": 2}))
-        assert first != second
-        assert not os.path.exists(tmp_path / "tuna-installer")
-
-    def test_precreated_world_writable_dir_is_not_adopted(self, tmp_path, monkeypatch):
-        """The old code accepted a pre-existing 0777 <base>/tuna-installer."""
-        import stat
-        monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
-        hostile = tmp_path / "tuna-installer"
-        hostile.mkdir(mode=0o777)
-        os.chmod(hostile, 0o777)  # defeat the umask
-        rundir = core.recipe_dir(core.write_recipe({"x": 1}))
-        assert rundir != str(hostile)
-        assert stat.S_IMODE(os.stat(rundir).st_mode) == 0o700
-
-
-# ─── fisherman invocation ────────────────────────────────────────────────────
+# ─── fisherman invocation: the recipe on stdin ──────────────────────────────
 
 class TestFisherman:
-    def test_argv_uses_sudo_outside_flatpak(self):
-        assert core.fisherman_argv("/run/user/1000/recipe.json") == [
-            "sudo", "/usr/local/bin/fisherman", "/run/user/1000/recipe.json"]
+    def test_nothing_writes_a_recipe_file(self):
+        assert not hasattr(core, "write_recipe")
+        assert not hasattr(core, "recipe_dir")
+        assert "tempfile" not in open(core.__file__).read()
 
-    def test_shell_quotes_arguments(self):
-        cmd = core.fisherman_shell("/run/user/1000/recipe.json")
-        assert cmd == "sudo /usr/local/bin/fisherman /run/user/1000/recipe.json"
+    def test_argv_uses_sudo_outside_flatpak_and_reads_stdin(self):
+        assert core.fisherman_argv(in_flatpak=False) == [
+            "sudo", "/usr/local/bin/fisherman", "-"]
+
+    def test_shell_line(self):
+        assert core.fisherman_shell() == "sudo /usr/local/bin/fisherman -"
 
     def test_flatpak_argv_runs_pkexec_inside_a_host_bash(self):
         # Not `flatpak-spawn --host pkexec ...`: then fisherman's parent is
         # the host's flatpak-session-helper and it cannot be cancelled.
-        argv = core.fisherman_argv("/run/user/1000/recipe.json", in_flatpak=True)
-        assert argv[:5] == ["flatpak-spawn", "--host", "bash", "-c",
-                            'pkexec /usr/local/bin/fisherman "$1"; exit $?']
-        assert argv[5:] == ["--", "/run/user/1000/recipe.json"]
+        argv = core.fisherman_argv(in_flatpak=True)
+        assert argv == ["flatpak-spawn", "--host", "bash", "-c",
+                        "pkexec /usr/local/bin/fisherman -; exit $?"]
 
-    def test_flatpak_wrapper_passes_stdout_stderr_and_status_through(self, tmp_path):
-        """Run the wrapper's bash for real, with pkexec stubbed.
-
-        The recipe path holds characters a shell would act on if it were
-        interpolated into the script; it must reach fisherman as one argv.
-        """
+    def test_flatpak_wrapper_passes_stdin_stdout_stderr_and_status_through(self, tmp_path):
+        """Run the wrapper's bash for real, with pkexec stubbed: the recipe
+        written to the wrapper's stdin is what fisherman reads."""
         stub = tmp_path / "bin"
         stub.mkdir()
         (stub / "pkexec").write_text(
             '#!/bin/sh\n'
             'printf \'{"type":"step","argv":"%s|%s"}\\n\' "$1" "$2"\n'
+            'cat > "$RECIPE_OUT"\n'
             'echo "to stderr" >&2\n'
             'exit 7\n')
         (stub / "pkexec").chmod(0o755)
-        recipe = str(tmp_path / "a b $(touch pwned) ;x.json")
-        argv = core.fisherman_argv(recipe, in_flatpak=True)
+        argv = core.fisherman_argv(in_flatpak=True)
         assert argv[:2] == ["flatpak-spawn", "--host"]
-        env = dict(os.environ, PATH=f"{stub}:{os.environ['PATH']}")
-        done = subprocess.run(argv[2:], env=env, cwd=tmp_path,
-                              capture_output=True, text=True)
+        out = tmp_path / "recipe-read"
+        env = dict(os.environ, PATH=f"{stub}:{os.environ['PATH']}", RECIPE_OUT=str(out))
+        recipe = core.build_recipe(**MINIMAL, encryption_type="luks-passphrase",
+                                   passphrase="pw")
+        done = subprocess.run(argv[2:], env=env, cwd=tmp_path, input=core.recipe_stdin(recipe),
+                              capture_output=True)
         assert done.returncode == 7
-        assert done.stdout == (
-            '{"type":"step","argv":"/usr/local/bin/fisherman|' + recipe + '"}\n')
-        assert done.stderr == "to stderr\n"
-        assert not (tmp_path / "pwned").exists()
+        assert done.stdout == b'{"type":"step","argv":"/usr/local/bin/fisherman|-"}\n'
+        assert done.stderr == b"to stderr\n"
+        assert json.loads(out.read_text()) == recipe
+        assert list(tmp_path.glob("*.json")) == []
 
-    def test_shell_quotes_spaces(self):
-        cmd = core.fisherman_shell("/path with spaces/recipe.json")
-        assert "'/path with spaces/recipe.json'" in cmd
+
+# ─── validation and encryption choices: fisherman's ────────────────────────
+
+class TestValidateAndChoices:
+    def test_validate_argv_is_partial_on_stdin_and_unprivileged(self):
+        assert core.VALIDATE_ARGV[-4:] == ["validate", "--json", "--partial", "-"]
+        assert "sudo" not in core.VALIDATE_ARGV and "pkexec" not in core.VALIDATE_ARGV
+
+    def test_choices_come_from_the_file(self):
+        assert [c["type"] for c in core.ENCRYPTION_CHOICES] == [
+            "none", "luks-passphrase", "tpm2-luks", "tpm2-luks-passphrase"]
+        assert core.needs_passphrase("tpm2-luks-passphrase")
+        assert not core.needs_passphrase("tpm2-luks")
+        assert core.needs_tpm2("tpm2-luks") and not core.needs_tpm2("luks-passphrase")
 
 
 # ─── install log ─────────────────────────────────────────────────────────────
@@ -448,73 +402,3 @@ class TestLoadCatalogFallback:
         assert nodes == []
 
 
-class TestLiveIsoImage:
-    def test_live_iso_image_success(self, monkeypatch, tmp_path):
-        status_json = json.dumps({
-            "status": {
-                "booted": {
-                    "image": {
-                        "image": {
-                            "image": "ghcr.io/tuna-os/xfce:latest"
-                        }
-                    }
-                }
-            }
-        })
-        fake = subprocess.CompletedProcess(args=[], returncode=0, stdout=status_json, stderr="")
-        monkeypatch.setattr(core, "host_run", lambda argv, **kw: fake)
-        cmdline = tmp_path / "cmdline"
-        cmdline.write_text("BOOT_IMAGE=/vmlinuz rd.live.image quiet")
-
-        real_open = open
-
-        def mocked_open(path, *args, **kwargs):
-            if path == "/proc/cmdline":
-                return real_open(cmdline, *args, **kwargs)
-            return real_open(path, *args, **kwargs)
-
-        monkeypatch.setattr("builtins.open", mocked_open)
-        assert core.live_iso_image() == "ghcr.io/tuna-os/xfce:latest"
-
-    def test_live_iso_image_bootc_error(self, monkeypatch):
-        fake = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="error")
-        monkeypatch.setattr(core, "host_run", lambda argv, **kw: fake)
-        assert core.live_iso_image() is None
-
-    def test_live_iso_image_invalid_json(self, monkeypatch):
-        fake = subprocess.CompletedProcess(args=[], returncode=0, stdout="not-json", stderr="")
-        monkeypatch.setattr(core, "host_run", lambda argv, **kw: fake)
-        assert core.live_iso_image() is None
-
-    def test_live_iso_image_empty_ref(self, monkeypatch):
-        fake = subprocess.CompletedProcess(args=[], returncode=0, stdout="{}", stderr="")
-        monkeypatch.setattr(core, "host_run", lambda argv, **kw: fake)
-        assert core.live_iso_image() is None
-
-    def test_live_iso_image_not_live(self, monkeypatch, tmp_path):
-        status_json = json.dumps({
-            "status": {
-                "booted": {
-                    "image": {
-                        "image": {
-                            "image": "ghcr.io/tuna-os/xfce:latest"
-                        }
-                    }
-                }
-            }
-        })
-        fake = subprocess.CompletedProcess(args=[], returncode=0, stdout=status_json, stderr="")
-        monkeypatch.setattr(core, "host_run", lambda argv, **kw: fake)
-        cmdline = tmp_path / "cmdline"
-        cmdline.write_text("BOOT_IMAGE=/vmlinuz quiet")
-
-        real_open = open
-
-        def mocked_open(path, *args, **kwargs):
-            if path == "/proc/cmdline":
-                return real_open(cmdline, *args, **kwargs)
-            return real_open(path, *args, **kwargs)
-
-        monkeypatch.setattr("builtins.open", mocked_open)
-        monkeypatch.setattr(os.path, "exists", lambda p: False)
-        assert core.live_iso_image() is None
