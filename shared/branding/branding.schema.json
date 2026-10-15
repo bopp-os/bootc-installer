@@ -11,8 +11,8 @@
     },
     "id": {
       "type": "string",
-      "pattern": "^[a-z0-9._-]*$",
-      "description": "Lower-case identifier written as the recipe's distroID. Falls back to ID."
+      "pattern": "^([a-z][a-z0-9-]{0,62})?$",
+      "description": "Lower-case identifier written as the recipe's distroID, so it follows fisherman's distroID rule (a lowercase letter, then up to 62 lowercase letters, digits and hyphens). Falls back to ID."
     },
     "vendor": {
       "type": "string",

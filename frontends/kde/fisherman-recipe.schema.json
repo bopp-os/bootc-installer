@@ -84,6 +84,7 @@
     "distroID": {
       "type": "string",
       "default": "bootc",
+      "pattern": "^([a-z][a-z0-9-]{0,62})?$",
       "description": "Short lowercase distribution id that names the OEM setup paths and services on the target (/etc/<distroID>/oem/). Frontends write the branding id; fisherman uses \"bootc\" when it is empty."
     },
     "selinuxDisabled": {
@@ -234,6 +235,7 @@
     },
     "brewTap": {
       "type": "string",
+      "pattern": "^([A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*)?$",
       "description": "Homebrew tap to add before OEM packages, e.g. ublue-os/tap."
     }
   }

@@ -101,6 +101,33 @@ class SharedRecipeSchemaTests(unittest.TestCase):
         for u in ["Alice", "1abc", "a b", "a" * 33, "al.ice"]:
             self.assertIsNone(re.fullmatch(user, u), u)
 
+    def test_distro_id_and_brew_tap_patterns_are_fishermans(self):
+        """distroID and brewTap take fisherman's own patterns
+        (distroIDPattern and brewTapPattern in rules.go, fisherman#299), with
+        the empty string allowed as fisherman allows it. distroID names paths
+        and units on the target and brewTap goes into a shell script, so a
+        looser schema would pass recipes `fisherman validate` rejects."""
+        rules_go = REPO / "fisherman" / "fisherman" / "internal" / "recipe" / "rules.go"
+        if not rules_go.exists():
+            self.skipTest("fisherman submodule not checked out")
+        src = rules_go.read_text()
+        props = json.loads(SHARED.read_text())["properties"]
+        for field, var in (("distroID", "distroIDPattern"), ("brewTap", "brewTapPattern")):
+            with self.subTest(field=field):
+                m = re.search(var + r"\s*=\s*regexp\.MustCompile\(`\^(.*)\$`\)", src)
+                self.assertIsNotNone(m, f"could not read fisherman's {var}")
+                self.assertEqual(props[field]["pattern"], f"^({m.group(1)})?$")
+        distro = props["distroID"]["pattern"]
+        for ok in ["", "bootc", "fedora", "bluefin-lts", "a" * 63]:
+            self.assertRegex(ok, distro)
+        for bad in ["Fedora", "1os", "a/b", "..", "a_b", "a" * 64, "-os"]:
+            self.assertIsNone(re.fullmatch(distro, bad), bad)
+        tap = props["brewTap"]["pattern"]
+        for ok in ["", "owner/tap", "Org_1/homebrew-tap.v2"]:
+            self.assertRegex(ok, tap)
+        for bad in ["owner", "a/b/c", "-x/y", "x/y;rm", "x y/z", "/y"]:
+            self.assertIsNone(re.fullmatch(tap, bad), bad)
+
     def test_kde_copy_matches_shared(self):
         self.assertEqual(
             KDE.read_bytes(), SHARED.read_bytes(),

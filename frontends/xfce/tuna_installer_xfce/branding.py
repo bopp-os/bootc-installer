@@ -114,6 +114,8 @@ COPY_DEFAULTS_JSON = r'''{
   "validate_username_invalid_start": "Start the username with a lowercase letter or an underscore.",
   "validate_username_invalid_char": "Use only lowercase letters, digits, underscores and hyphens in the username.",
   "validate_username_reserved": "This username is used by the system. Choose a different one.",
+  "validate_distro_id_invalid": "Use only lowercase letters, digits and hyphens in the distro ID.",
+  "validate_brew_tap_invalid": "Write the Homebrew tap as owner/name, with no spaces or symbols.",
   "validate_encryption_unsupported": "This encryption type is not supported.",
   "validate_encryption_passphrase_required": "Enter a passphrase.",
   "validate_encryption_unsupported_on_zfs": "ZFS cannot be encrypted. Choose a different filesystem or no encryption.",
