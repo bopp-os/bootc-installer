@@ -33,7 +33,7 @@
             "name": "03-encryption",
             "png": "docs/screenshots/03-encryption.png",
             "rendered": true,
-            "stddev": 0.05708610525477092
+            "stddev": 0.057747395233248025
         },
         {
             "colours": 295,
@@ -152,8 +152,8 @@
     "text_source": "qml-item-tree",
     "transition_pixels": [
         174424,
-        123240,
-        118021,
+        122887,
+        117851,
         393192,
         498374,
         15001
