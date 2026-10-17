@@ -216,7 +216,7 @@ mod tests {
             eprintln!("shared/probe/fixtures is absent; this tree is checked out alone");
             return;
         }
-        for name in ["laptop", "container", "vm"] {
+        for name in ["laptop", "container", "vm", "pure-live-oci"] {
             let input = std::fs::read_to_string(dir.join(format!("{name}.json"))).unwrap();
             let want: serde_json::Value = serde_json::from_str(
                 &std::fs::read_to_string(dir.join(format!("{name}.expected.json"))).unwrap(),

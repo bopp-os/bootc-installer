@@ -14,7 +14,7 @@ from tuna_installer_xfce import core, fisherman_probe
 
 FIXTURES = os.path.join(os.path.dirname(__file__), "..", "..", "..",
                         "shared", "probe", "fixtures")
-NAMES = ("laptop", "container", "vm")
+NAMES = ("laptop", "container", "vm", "pure-live-oci")
 
 pytestmark = pytest.mark.skipif(not os.path.isdir(FIXTURES),
                                 reason="not inside the bootc-installer monorepo")
@@ -48,6 +48,19 @@ def test_tpm_and_requirements_match(fixture, name):
     want = _expected(name)
     assert core.has_tpm() is want["tpm_usable"]
     assert core.unmet_requirements() == want["unmet"]
+
+
+def test_pure_live_fixture_is_a_live_install_of_the_running_image(fixture):
+    fixture("pure-live-oci")
+    want = _expected("pure-live-oci")
+    assert core.is_live()
+    assert core.live_image() == want["live_image"]
+    assert want["live_image"] != ""
+    assert core.offline_images() == set(want["offline_images"])
+    # The live USB is the boot_disk, not a target: only the SSD shows.
+    disks, error = core.candidate_disks()
+    assert error is None
+    assert [d["path"] for d in disks] == [d["path"] for d in want["disks"]]
 
 
 def test_requirements_warning_lists_each_unmet_item(fixture):
