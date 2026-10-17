@@ -80,6 +80,15 @@ class TestLiveAndOffline:
         assert core.live_image() == expected["live_image"]
         assert core.offline_images() == set(expected["offline_images"])
 
+    def test_pure_live_oci_installs_the_running_image(self, monkeypatch):
+        _probe_from(monkeypatch, "pure-live-oci")
+        expected = json.load(open(os.path.join(FIXTURES, "pure-live-oci.expected.json")))
+        assert core.is_live()
+        assert core.live_image() == expected["live_image"]
+        assert expected["live_image"] != ""
+        assert core.offline_images() == set(expected["offline_images"])
+
+
     def test_installed_container_is_not_live(self, monkeypatch):
         _probe_from(monkeypatch, "container")
         assert not core.is_live()

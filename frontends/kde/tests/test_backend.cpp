@@ -713,6 +713,7 @@ void BackendTest::probeFixtures_data()
     QTest::newRow("laptop") << QStringLiteral("laptop");
     QTest::newRow("container") << QStringLiteral("container");
     QTest::newRow("vm") << QStringLiteral("vm");
+    QTest::newRow("pure-live-oci") << QStringLiteral("pure-live-oci");
 }
 
 void BackendTest::probeFixtures()
@@ -930,7 +931,7 @@ void BackendTest::validateSendsAPartialRecipeOnStdin()
 void BackendTest::liveMediaComesFromTheProbe()
 {
     const QString dir = QStringLiteral(PROBE_FIXTURES_DIR);
-    for (const QString &name : {QStringLiteral("laptop"), QStringLiteral("container"), QStringLiteral("vm")}) {
+    for (const QString &name : {QStringLiteral("laptop"), QStringLiteral("container"), QStringLiteral("vm"), QStringLiteral("pure-live-oci")}) {
         QFile in(dir + QLatin1Char('/') + name + QStringLiteral(".json"));
         QFile want(dir + QLatin1Char('/') + name + QStringLiteral(".expected.json"));
         if (!in.open(QIODevice::ReadOnly) || !want.open(QIODevice::ReadOnly))

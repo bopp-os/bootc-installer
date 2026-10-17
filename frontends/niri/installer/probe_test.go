@@ -16,7 +16,7 @@ func TestProbeFixturesRenderLikeEveryFrontend(t *testing.T) {
 	if _, err := os.Stat(probeFixtures); err != nil {
 		t.Skip("shared/probe/fixtures is absent; this tree is checked out alone")
 	}
-	for _, name := range []string{"laptop", "container", "vm"} {
+	for _, name := range []string{"laptop", "container", "vm", "pure-live-oci"} {
 		t.Run(name, func(t *testing.T) {
 			input, err := os.ReadFile(filepath.Join(probeFixtures, name+".json"))
 			if err != nil {

@@ -20,7 +20,7 @@ from bootc_installer.core.system import Systeminfo  # noqa: E402
 from bootc_installer.utils import fisherman_runner  # noqa: E402
 
 FIXTURES = os.path.join(REPO, "shared", "probe", "fixtures")
-NAMES = ("laptop", "container", "vm")
+NAMES = ("laptop", "container", "vm", "pure-live-oci")
 
 
 def _fixture_path(name):
@@ -96,6 +96,18 @@ class TestFixtures(_ProbeIsolation):
         manager = DisksManager()
         self.assertEqual(manager.get_disk("/dev/sdc").display_name, "Extreme SSD")
         self.assertIsNone(manager.get_disk("/dev/sdb"))  # the live USB
+    def test_pure_live_fixture_is_a_live_install_of_the_running_image(self):
+        _reset()
+        self._with_fixture("pure-live-oci")
+        want = _expected("pure-live-oci")
+        self.assertTrue(Systeminfo.is_live())
+        self.assertEqual(Systeminfo.live_image(), want["live_image"])
+        self.assertNotEqual(want["live_image"], "")
+        self.assertEqual(Systeminfo.unmet_requirements(), [])
+        # The live USB is the boot_disk, not a target: only the SSD shows.
+        self.assertEqual([d.disk for d in DisksManager().all_disks()],
+                         [d["path"] for d in want["disks"]])
+
 
 
 class TestProbeFailure(_ProbeIsolation):

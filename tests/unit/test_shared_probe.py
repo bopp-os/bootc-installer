@@ -14,10 +14,12 @@ tests keep it honest in three directions:
 3. The Python frontends' copies of the reader match the canonical one.
 """
 
+import glob
 import importlib.util
 import json
 import os
 import re
+import subprocess
 import sys
 import unittest
 
@@ -206,6 +208,18 @@ class TestReader(unittest.TestCase):
         self.assertEqual(self.fp.live_image(odd), "")
         self.assertEqual(self.fp.offline_images({}), [])
 
+    def test_pure_live_fixture_is_a_live_install_of_the_running_image(self):
+        """Tacklebox live media (cmdline:root=tbox:) with an embedded OCI
+        store: the probe reports live, names the booted image, and offers
+        only the non-boot disk, so the recipe may leave `image` empty."""
+        result = self.fp.parse(json.dumps(_fixture("pure-live-oci")))
+        self.assertTrue(self.fp.is_live(result))
+        self.assertEqual(self.fp.live_image(result), "ghcr.io/example/os:stable")
+        self.assertIn("ghcr.io/example/os:stable", self.fp.offline_images(result))
+        self.assertEqual([d["path"] for d in self.fp.eligible_disks(result)],
+                         ["/dev/nvme0n1"])
+        self.assertEqual(self.fp.unmet_requirements(result), [])
+
     def test_the_expected_renderings_cover_what_drifted(self):
         laptop = _expected("laptop")
         paths = [d["path"] for d in laptop["disks"]]
@@ -318,6 +332,54 @@ class TestCopies(unittest.TestCase):
                 with open(copy, "rb") as fh:
                     self.assertEqual(fh.read(), canonical,
                                      f"{copy} drifted from shared/probe/fisherman_probe.py")
+
+
+class TestFishermanPin(unittest.TestCase):
+    """Every graphical installer runs the same fisherman revision.
+
+    The `fisherman` submodule pin is the revision, and each imported
+    frontend's Flatpak manifest (kde, cosmic, niri, xfce) pins its bundled
+    fisherman source to that same commit. GNOME builds fisherman from
+    ../fisherman, so it follows the submodule with no pin of its own. A
+    frontend on another revision would probe, validate and install with
+    different rules.
+    """
+
+    def _submodule_pin(self):
+        try:
+            out = subprocess.run(
+                ["git", "ls-files", "-s", "fisherman"], cwd=REPO,
+                capture_output=True, text=True, check=True).stdout
+        except (OSError, subprocess.CalledProcessError) as e:
+            self.skipTest(f"cannot read the fisherman gitlink: {e}")
+        pin = out.split()[1] if out.split() else ""
+        if not re.fullmatch(r"[0-9a-f]{40}", pin or ""):
+            self.skipTest(f"fisherman gitlink unreadable: {out!r}")
+        return pin
+
+    def _manifest_pins(self):
+        manifests = sorted(glob.glob(os.path.join(
+            REPO, "frontends", "*", "flatpak", "org.tunaos.Installer*.json")))
+        self.assertEqual(len(manifests), 4,
+                         f"expected four frontend manifests, found {manifests}")
+        pins = {}
+        for manifest in manifests:
+            with open(manifest, encoding="utf-8") as fh:
+                modules = json.load(fh)["modules"]
+            commits = [s.get("commit") for m in modules
+                       if m.get("name") == "fisherman" for s in m.get("sources", [])]
+            self.assertEqual(len(commits), 1,
+                             f"{manifest} must pin one fisherman commit")
+            pins[os.path.relpath(manifest, REPO)] = commits[0]
+        return pins
+
+    def test_every_frontend_manifest_pins_the_submodule_revision(self):
+        pin = self._submodule_pin()
+        for manifest, commit in self._manifest_pins().items():
+            with self.subTest(manifest=manifest):
+                self.assertEqual(commit, pin,
+                                 f"{manifest} pins {commit}, not the fisherman "
+                                 f"submodule revision {pin}")
 
 
 if __name__ == "__main__":
