@@ -1,0 +1,18 @@
+{
+  "disks": [
+    {
+      "path": "/dev/nvme0n1",
+      "title": "Samsung SSD 980 500GB",
+      "model": "Samsung SSD 980 500GB",
+      "size_label": "500 GiB",
+      "transport_label": "NVMe",
+      "removable": false
+    }
+  ],
+  "tpm_usable": true,
+  "unmet": [],
+  "live_image": "ghcr.io/example/os:stable",
+  "offline_images": [
+    "ghcr.io/example/os:stable"
+  ]
+}

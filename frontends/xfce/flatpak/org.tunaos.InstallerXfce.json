@@ -56,7 +56,7 @@
         {
           "type": "git",
           "url": "https://github.com/tuna-os/fisherman.git",
-          "commit": "027fa25c1d8bc01e2ac97d119cda9e8bb9c99ac7"
+          "commit": "d349c31e47b1c05ef82d67811d5f4f9e77a62e2a"
         }
       ]
     },

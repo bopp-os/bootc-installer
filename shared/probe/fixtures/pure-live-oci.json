@@ -1,0 +1,69 @@
+{
+  "protocol_version": 1,
+  "disks": [
+    {
+      "path": "/dev/sda",
+      "size_bytes": 17179869184,
+      "size_label": "16 GiB",
+      "model": "Ultra USB 3.0",
+      "vendor": "SanDisk",
+      "transport": "usb",
+      "transport_label": "USB",
+      "removable": true,
+      "read_only": false,
+      "eligible": false,
+      "excluded_reason": "boot_disk"
+    },
+    {
+      "path": "/dev/nvme0n1",
+      "size_bytes": 536870912000,
+      "size_label": "500 GiB",
+      "model": "Samsung SSD 980 500GB",
+      "vendor": "Samsung",
+      "transport": "nvme",
+      "transport_label": "NVMe",
+      "removable": false,
+      "read_only": false,
+      "eligible": true
+    },
+    {
+      "path": "/dev/sdb",
+      "size_bytes": 8589934592,
+      "size_label": "8 GiB",
+      "model": "DataTraveler",
+      "vendor": "",
+      "transport": "usb",
+      "transport_label": "USB",
+      "removable": true,
+      "read_only": false,
+      "eligible": false,
+      "excluded_reason": "too_small"
+    }
+  ],
+  "tpm": {
+    "present": true,
+    "version": "2.0",
+    "usable": true
+  },
+  "system": {
+    "ram_bytes": 8589934592,
+    "cpu_threads": 4,
+    "cpu_cores": 4,
+    "uefi": true,
+    "meets_requirements": true,
+    "unmet": []
+  },
+  "live": {
+    "is_live": true,
+    "live_image": "ghcr.io/example/os:stable",
+    "detected_by": "cmdline:root=tbox:"
+  },
+  "offline": {
+    "stores": [
+      "/usr/share/tuna-installer/oci-store"
+    ],
+    "images": [
+      "ghcr.io/example/os:stable"
+    ]
+  }
+}
