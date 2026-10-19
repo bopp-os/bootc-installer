@@ -4,6 +4,7 @@ utilsdir = join_paths(pkgdatadir, 'bootc_installer/utils')
 sources = [
   '__init__.py',
   'finals.py',
+  'icons.py',
   'run_async.py',
   'processor.py',
   'recipe.py',

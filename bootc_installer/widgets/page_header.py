@@ -37,5 +37,11 @@ class BootcPageHeader(Gtk.Box):
     def set_paintable(self, paintable):
         self._icon.set_paintable(paintable)
 
+    def set_from_file(self, filename):
+        self._icon.set_from_file(filename)
+
+    def set_from_icon_name(self, icon_name):
+        self._icon.set_from_icon_name(icon_name)
+
     def set_from_resource(self, resource_path):
         self._icon.set_from_resource(resource_path)

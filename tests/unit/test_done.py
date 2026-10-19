@@ -345,3 +345,30 @@ class TestFailureHintExtraction(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestConfiguredLogo(unittest.TestCase):
+    def test_absolute_logo_is_a_host_file_in_flatpak(self):
+        header = MagicMock()
+        with patch('bootc_installer.utils.icons.os.path.exists', return_value=True):
+            apply_icon(header, '/usr/share/example/logo.svg')
+        header.set_from_file.assert_called_once_with('/run/host/usr/share/example/logo.svg')
+        header.set_from_resource.assert_not_called()
+
+    def test_live_install_without_catalog_selection_uses_recipe_identity(self):
+        obj = MagicMock()
+        obj._BootcDone__window = types.SimpleNamespace(
+            recipe={'distro_name': 'Example OS', 'distro_logo': 'example-logo'},
+            pretty_name=None, selected_icon=None)
+        BootcDone.set_result(obj, True, None)
+        self.assertEqual(obj.page_header.title, 'Example OS is installed')
+        self.assertEqual(obj.page_header.icon_name, 'example-logo')
+
+    def test_explicit_catalog_selection_still_names_installed_product(self):
+        obj = MagicMock()
+        obj._BootcDone__window = types.SimpleNamespace(
+            recipe={'distro_name': 'Example OS', 'distro_logo': 'example-logo'},
+            pretty_name='Selected OS', selected_icon='selected-logo')
+        BootcDone.set_result(obj, True, None)
+        self.assertEqual(obj.page_header.title, 'Selected OS is installed')
+        self.assertEqual(obj.page_header.icon_name, 'selected-logo')

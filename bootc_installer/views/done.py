@@ -16,13 +16,19 @@ log = logger
 
 
 def apply_icon(page_header, icon_spec):
-    """Set the page header icon from a resource:// URI or an icon-theme name."""
+    """Apply the same resource, host file or theme spec as catalog rows."""
     try:
-        if icon_spec.startswith("resource://"):
-            resource_path = icon_spec[len("resource://"):]
-            page_header.set_from_resource(resource_path)
+        from bootc_installer.utils.icons import resolve_icon
+        resolved = resolve_icon(icon_spec)
+        if resolved is None:
+            return
+        kind, value = resolved
+        if kind == "resource":
+            page_header.set_from_resource(value)
+        elif kind == "file":
+            page_header.set_from_file(value)
         else:
-            page_header.icon_name = icon_spec
+            page_header.icon_name = value
     except Exception as e:
         log.warning("Could not apply icon %r: %s", icon_spec, e)
 
@@ -152,7 +158,8 @@ class BootcDone(Adw.Bin):
                 subtitle = (_("Installed in %s. ") % time_str) + subtitle
             self.page_header.subtitle = subtitle
             self.btn_reboot.set_label(copy_text.text(self.__window, "done_restart") or _("Restart now"))
-            icon_spec = getattr(self.__window, "selected_icon", None)
+            icon_spec = (getattr(self.__window, "selected_icon", None)
+                         or self.__window.recipe.get("distro_logo"))
             if icon_spec:
                 apply_icon(self.page_header, icon_spec)
             self.btn_reboot.set_visible(True)

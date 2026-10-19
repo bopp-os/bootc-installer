@@ -104,7 +104,7 @@ class RecipeLoader:
         file_wins = b.source in ("env", "file")
         if file_wins or not r.get("distro_name"):
             r["distro_name"] = b.name
-        if not r.get("distro_logo"):
+        if (file_wins and b.logo) or not r.get("distro_logo"):
             r["distro_logo"] = b.logo or "org.bootcinstaller.Installer"
         # Every flavour line comes from the branding copy layer; the recipe's
         # own welcome_title/welcome_subtitle are honoured only when no
@@ -146,6 +146,8 @@ class RecipeLoader:
                 },
             }
         d = b.as_dict()
+        # Consumers of branding and legacy recipe fields must see one identity.
+        d.update(name=r["distro_name"], logo=r["distro_logo"])
         d.update({"store_url": b.store_url, "copy": dict(b.copy), "assets": dict(b.assets),
                   "confirm_quotes": dict(b.confirm_quotes), "extensions": dict(b.extensions)})
         r["branding"] = d

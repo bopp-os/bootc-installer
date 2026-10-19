@@ -201,3 +201,26 @@ One per language, each reading the same fixtures under `fixtures/`:
 `fixtures/expected.json` lists the outcome for three cases: file plus
 os-release, os-release only, nothing readable. A resolver that disagrees
 with it is wrong, whichever language it is in.
+
+## GNOME logo rendering and legacy recipes
+
+GNOME accepts a theme icon name, a `resource:///...` URI for an asset bundled
+in the installer, or an absolute filesystem path for `logo` / `distro_logo`
+and catalog `icon` values. In Flatpak, host `/usr/...` and `/etc/...` file
+paths resolve below `/run/host`; `/app/...` and already mapped paths stay
+unchanged. Ship the file on the live host and retain the manifest's host
+filesystem permission. A missing file is not an icon-theme name. No URL is
+fetched and no image is installed by this resolver.
+
+An explicit branding-file logo wins over a legacy recipe logo. Without a
+branding-file identity, a recipe's `distro_name` and `distro_logo` also become
+the effective identity used by copy consumers, rather than leaking the live
+host's name into the completion page. The welcome page displays that product
+logo before the catalog's default icon. Completion displays an explicitly
+selected catalog image's name/icon, falling back to the configured product
+identity when live media skips image selection. Unconfigured success and
+failure still use their existing status icons.
+
+This rendering support is GNOME-specific. Other frontends resolve identity
+from the shared branding contract but their artwork wiring is tracked in
+`docs/PARITY.md`; do not assume a resolved logo is rendered everywhere.

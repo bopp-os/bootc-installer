@@ -246,3 +246,26 @@ class TestRecipePaths(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestEffectiveBranding(unittest.TestCase):
+    def test_recipe_identity_reaches_shared_copy_consumers(self):
+        from types import SimpleNamespace
+
+        from bootc_installer.utils.branding import Branding
+        from bootc_installer.utils.copy import product_name
+        with patch('bootc_installer.utils.recipe.branding.resolve',
+                   return_value=Branding(name='Host OS', logo='host-logo', source='os-release')):
+            recipe = _load_with_custom_recipe(_VALID_RECIPE).raw
+        self.assertEqual(recipe['branding']['name'], 'TestOS')
+        self.assertEqual(recipe['branding']['logo'], '/usr/share/logo.svg')
+        self.assertEqual(product_name(SimpleNamespace(recipe=recipe)), 'TestOS')
+
+    def test_branding_file_overrides_recipe_logo_and_name(self):
+        from bootc_installer.utils.branding import Branding
+        with patch('bootc_installer.utils.recipe.branding.resolve',
+                   return_value=Branding(name='Fork OS', logo='/usr/share/fork.svg', source='file')):
+            recipe = _load_with_custom_recipe(_VALID_RECIPE).raw
+        self.assertEqual(recipe['distro_name'], 'Fork OS')
+        self.assertEqual(recipe['distro_logo'], '/usr/share/fork.svg')
+        self.assertEqual(recipe['branding']['logo'], '/usr/share/fork.svg')
