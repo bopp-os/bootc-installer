@@ -11,6 +11,7 @@ on:
   push:
     branches: [dev]
     paths:
+      - "shared/branding/**"
       - "frontends/niri/ui/**"
       - "frontends/niri/tests/**"
       - "shared/walkthrough/**"
@@ -18,6 +19,7 @@ on:
       - ".github/workflows/screenshots-niri.yml"
   pull_request:
     paths:
+      - "shared/branding/**"
       - "frontends/niri/ui/**"
       - "frontends/niri/tests/**"
       - "shared/walkthrough/**"

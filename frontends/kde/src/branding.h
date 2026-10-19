@@ -38,6 +38,21 @@ struct Branding {
     QVariantMap copyAsVariantMap() const;
 };
 
+// Portable logo contract: a theme icon or an absolute local path. Keep the
+// unescaped path separate from the QML URL so '#' and '%' remain filename
+// characters, rather than URL fragments or escapes.
+struct Logo {
+    enum class Kind { None, Theme, File };
+    Kind kind = Kind::None;
+    QString value;
+
+    QString source() const;
+};
+
+// Map host /usr/ and /etc/ paths only inside a Flatpak. No filesystem or
+// icon-theme lookup here; Kirigami handles unavailable artwork via fallback.
+Logo resolveLogo(const QString &spec, bool inFlatpak);
+
 // copy-defaults.json (frontends/kde/copy-defaults.json, a byte-identical copy
 // of shared/branding/copy-defaults.json) minus its "_comment".
 QHash<QString, QString> copyDefaults();

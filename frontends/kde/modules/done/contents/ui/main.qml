@@ -27,7 +27,11 @@ TunaComponents.SetupModule {
             spacing: Kirigami.Units.largeSpacing
 
             Kirigami.Icon {
-                source: InstallerController.succeeded ? "checkmark" : "dialog-error"
+                objectName: "doneLogo"
+                source: InstallerController.succeeded
+                    ? (InstallerController.logoSource || "checkmark")
+                    : "dialog-error"
+                fallback: InstallerController.succeeded ? "checkmark" : "dialog-error"
                 implicitWidth: Kirigami.Units.iconSizes.enormous
                 implicitHeight: Kirigami.Units.iconSizes.enormous
 

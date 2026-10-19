@@ -16,6 +16,7 @@ on:
   push:
     branches: [dev]
     paths:
+      - "shared/branding/**"
       - "frontends/kde/src/**"
       - "frontends/kde/modules/**"
       - "frontends/kde/tests/**"
@@ -24,6 +25,7 @@ on:
       - ".github/workflows/screenshots-kde.yml"
   pull_request:
     paths:
+      - "shared/branding/**"
       - "frontends/kde/src/**"
       - "frontends/kde/modules/**"
       - "frontends/kde/tests/**"
@@ -97,6 +99,7 @@ jobs:
           # with the neutral fallback name rather than the container's
           # PRETTY_NAME.
           BOOTC_INSTALLER_PRODUCT_NAME: TunaOS
+          BOOTC_INSTALLER_BRANDING: ${{ github.workspace }}/shared/walkthrough/capture-branding.json
           # The disks and the TPM come from shared/probe/fixtures/laptop.json,
           # which the capture harness sets as BOOTC_INSTALLER_FAKE_PROBE. Its
           # TPM 2.0 is usable, so the encryption step shows the TPM choices.

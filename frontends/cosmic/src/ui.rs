@@ -319,14 +319,35 @@ fn nav_row<'a>(
     row.align_y(Alignment::Center).into()
 }
 
+/// Resolve the optional product logo once, after the application selects its
+/// icon theme. Missing/unreadable files and missing themed icons use the
+/// original neutral artwork. The failed-install page never calls this helper.
+fn product_logo(fallback: &'static str) -> widget::icon::Icon {
+    static LOGO: std::sync::OnceLock<Option<widget::icon::Handle>> = std::sync::OnceLock::new();
+    let handle = LOGO.get_or_init(|| {
+        let path = match branding::logo_source(&branding::get().logo, crate::offline::in_flatpak()) {
+            branding::LogoSource::File(path) => Some(std::path::PathBuf::from(path)),
+            branding::LogoSource::Theme(name) => widget::icon::from_name(name)
+                .size(64).fallback(None).path(),
+            branding::LogoSource::None => None,
+        }?;
+        if !path.is_file() || std::fs::File::open(&path).is_err() {
+            return None;
+        }
+        Some(widget::icon::from_path(path))
+    });
+    match handle {
+        Some(handle) => handle.clone().icon().size(64)
+            .content_fit(cosmic::iced::ContentFit::Contain),
+        None => widget::icon::from_name(fallback).size(64).icon(),
+    }
+}
+
 fn welcome(app: &TunaInstaller) -> Element<'_, Message> {
     let spacing = cosmic::theme::active().cosmic().spacing;
 
     let hero = widget::column::with_children(vec![
-        widget::icon::from_name("drive-harddisk-symbolic")
-            .size(64)
-            .icon()
-            .into(),
+        product_logo("drive-harddisk-symbolic").into(),
         widget::text::title1(t_line("welcome_title")).into(),
         widget::text::body(with_product(WELCOME_BODY)).into(),
     ]);
@@ -685,7 +706,11 @@ fn done(app: &TunaInstaller) -> Element<'_, Message> {
     };
 
     let mut hero = widget::column::with_children(vec![
-        widget::icon::from_name(icon).size(64).icon().into(),
+        if app.install_ok() {
+            product_logo(icon).into()
+        } else {
+            widget::icon::from_name(icon).size(64).icon().into()
+        },
         widget::text::title2(title)
             .class(cosmic::theme::Text::Color(colour.into()))
             .into(),

@@ -60,6 +60,32 @@ What each frontend does with them:
 - `logo`: welcome and done page artwork; a themed icon name or an absolute
   path.
 
+### One file for every desktop
+
+Ship the same `/etc/bootc-installer/branding.json` in every live image.
+`fixtures/fork-branding.json` is a minimal name/logo/URL example exercised
+by all four language resolvers. There is no desktop-specific logo key.
+Omitted identity fields retain the existing os-release fallbacks; the
+example does not rename the base OS ID or hostname, or select a new image.
+
+The portable `logo` forms are an absolute file path or an icon-theme name.
+Use an absolute SVG or PNG installed in the live image for consistent
+artwork across desktops: theme names depend on the installed theme.
+`/usr/` and `/etc/` file paths map under `/run/host` **only in Flatpak**.
+Other absolute paths, including `/app/` and already mapped `/run/host/`
+paths, are unchanged. Files are interpreted as paths, so spaces and `#`
+are not URL delimiters. Remote URLs and relative paths are not loaded.
+`fixtures/logo-paths.json` locks down these rules for each adapter.
+
+The non-GNOME frontends render this logo on welcome and successful
+completion; failed installs keep their existing error presentation.
+Missing files or themed icons retain each frontend's neutral fallback
+(XFCE's text-only layout). GNOME and XFCE additionally understand GTK
+`resource:///` references, but these are application resources and are
+not portable live-image paths. Other `assets` keys still have the coverage
+shown in `docs/PARITY.md`; a shared configuration does not imply that every
+frontend implements every optional artwork slot.
+
 ## Flavour text, assets and the store
 
 Everything a product might want to say in its own voice is a `copy` key.

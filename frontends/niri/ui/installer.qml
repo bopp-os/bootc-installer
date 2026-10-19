@@ -50,6 +50,9 @@ ApplicationWindow {
     // names a product; before detect answers it shows the neutral name.
     property var branding: ({})
     readonly property string productName: branding.name || "Linux"
+    readonly property string productLogo: branding.logoKind === "file"
+        ? (branding.logoValue || "")
+        : (branding.logoKind === "theme" ? Quickshell.iconPath(branding.logoValue, true) : "")
     readonly property string storeUrl: branding.storeUrl || ""
 
     // Flavour text (shared/branding copy keys) with {name}/{disk} filled in.
@@ -567,17 +570,19 @@ ApplicationWindow {
                     width: Math.min(parent.width, 520)
                     spacing: Theme.spacingL
 
-                    // The product logo (branding.logo, a path) in a
+                    // The shared branding logo (host file or theme icon) in a
                     // primaryContainer disc; a glyph otherwise.
                     Rectangle {
                         Layout.alignment: Qt.AlignHCenter
                         width: 96; height: 96; radius: 48
                         color: Theme.primaryContainer
                         Image {
+                            id: welcomeLogo
+                            objectName: "welcomeBrandingLogo"
                             anchors.centerIn: parent
                             width: 56; height: 56
-                            source: (root.branding.logo || "").startsWith("/") ? "file://" + root.branding.logo : ""
-                            visible: source != ""
+                            source: root.productLogo
+                            visible: status === Image.Ready
                             fillMode: Image.PreserveAspectFit
                         }
                         StyledText {
@@ -585,7 +590,7 @@ ApplicationWindow {
                             text: "⬢"
                             font.pixelSize: 40
                             color: Theme.primaryContainerText
-                            visible: !(root.branding.logo || "").startsWith("/")
+                            visible: welcomeLogo.status !== Image.Ready
                         }
                     }
                     StyledText {
@@ -967,7 +972,17 @@ ApplicationWindow {
                         Layout.alignment: Qt.AlignHCenter
                         width: 96; height: 96; radius: 48
                         color: root.installSuccess ? Theme.withAlpha(Theme.success, 0.2) : Theme.withAlpha(Theme.error, 0.2)
+                        Image {
+                            id: doneLogo
+                            objectName: "doneBrandingLogo"
+                            anchors.centerIn: parent
+                            width: 56; height: 56
+                            source: root.installSuccess ? root.productLogo : ""
+                            visible: root.installSuccess && status === Image.Ready
+                            fillMode: Image.PreserveAspectFit
+                        }
                         StyledText {
+                            visible: !doneLogo.visible
                             anchors.centerIn: parent
                             text: root.installSuccess ? "✓" : "✗"
                             font.pixelSize: 48

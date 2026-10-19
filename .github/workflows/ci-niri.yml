@@ -10,10 +10,12 @@ on:
   push:
     branches: [dev]
     paths:
+      - "shared/branding/**"
       - "frontends/niri/installer/**"
       - ".github/workflows/ci-niri.yml"
   pull_request:
     paths:
+      - "shared/branding/**"
       - "frontends/niri/installer/**"
       - ".github/workflows/ci-niri.yml"
   workflow_dispatch:

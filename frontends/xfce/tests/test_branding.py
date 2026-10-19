@@ -36,7 +36,9 @@ def _case(name):
 
 
 @pytest.mark.parametrize(
-    "name", ["file_and_os_release", "os_release_only", "os_release_minimal", "nothing"])
+    "name", [name for name, case in json.load(
+        open(os.path.join(FIXTURES, "expected.json"))).items()
+        if isinstance(case, dict) and "expect" in case])
 def test_fixture_case(name):
     case, file_data, os_release = _case(name)
     got = branding.from_sources(file_data, os_release)
