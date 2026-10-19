@@ -88,3 +88,25 @@ key `<copy_key>_label`, the description `<copy_key>_description`.
 
 `tests/unit/test_encryption_choices.py` holds the shared copy to the
 submodule's file, and each frontend's copy to the shared one.
+
+### GNOME live-media storage adapter
+
+When the image step is absent, the GNOME system recipe may specify canonical
+`composeFsBackend` (boolean), `bootloader`, `filesystem`, `imageType`, and
+`flatpakVarPath`. These describe the image being installed, independently of
+branding. For each field the adapter prefers explicit image-step metadata,
+then the top-level system recipe, then matching image-catalog metadata.
+An explicit `false` backend flag is preserved. Catalog matching follows nested
+inheritance and registry/tag shorthand; unrelated first rows never choose the
+backend. Matching uses the selected reference before NVIDIA and local-source
+overrides. Empty strings fall through; malformed types and unsupported
+filesystem/bootloader names stop recipe generation before fisherman launches.
+
+Root filesystem values are the existing fisherman schema values (`xfs`,
+`ext4`, `btrfs`, `zfs`); an image requirement overrides the disk picker and clears
+stale btrfs subvolume selection when necessary. Manual mounts are retained.
+The adapter does not infer a filesystem from the backend or relax fisherman
+validation: for example, composefs plus XFS remains invalid. Sealed images may
+use ext4 with either bootc storage backend, as specified by the image producer.
+`local_imgref` changes the install source only (including an `oci:/...` source);
+`targetImgref` continues to identify the selected update-tracking image.

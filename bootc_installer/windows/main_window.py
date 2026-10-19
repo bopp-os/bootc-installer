@@ -492,11 +492,16 @@ class BootcWindow(Adw.ApplicationWindow):
             self.__view_progress.start_demo()
             return
 
-        recipe = Processor.gen_install_recipe(
-            self.recipe.get("log_file", "/tmp/vanilla_installer.log"),
-            self.finals,
-            self.recipe,
-        )
+        try:
+            recipe = Processor.gen_install_recipe(
+                self.recipe.get("log_file", "/tmp/vanilla_installer.log"),
+                self.finals,
+                self.recipe,
+            )
+        except ValueError as error:
+            logger.error("Refusing invalid installation recipe: %s", error)
+            self.toast(_("The installation storage configuration is invalid. Check the system recipe."), timeout=6)
+            return
         # The disk page keeps Next disabled without a disk, but this is the
         # last point before fisherman runs as root, so check what was actually
         # written. Starting with an empty disk only fails inside fisherman,
