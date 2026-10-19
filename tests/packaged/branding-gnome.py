@@ -68,3 +68,45 @@ assert storage['targetImgref'] == 'localhost/qualification/example:latest'
 print(json.dumps({'storage_contract': 'pass', 'filesystem': storage['filesystem'],
                   'composeFsBackend': storage['composeFsBackend'],
                   'source_target_separate': True, 'installation_executed': False}))
+
+# Build the real wizard against a valid host catalog with a root-level leaf.
+# This catches constructor crashes that isolated Gtk.Image probes cannot.
+import tempfile
+
+from bootc_installer.core.system import Systeminfo
+from bootc_installer.utils.recipe import RecipeLoader
+from bootc_installer.views.progress import BootcProgress
+from bootc_installer.windows.main_window import BootcWindow
+
+with tempfile.TemporaryDirectory() as directory:
+    recipe_path = directory + '/recipe.json'
+    with open(recipe_path, 'w') as stream:
+        json.dump({'log_file': directory + '/wizard.log',
+                   'imgref': 'localhost/qualification/example:latest',
+                   'steps': {'welcome': {'template': 'welcome'},
+                             'image': {'template': 'image'}}}, stream)
+    application = Adw.Application(application_id='org.bootcinstaller.Installer.Probe',
+                                  flags=Gio.ApplicationFlags.NON_UNIQUE)
+    application.register(None)
+    with patch.dict(os.environ, {'BOOTC_CUSTOM_RECIPE': recipe_path}), \
+            patch.object(RecipeLoader, '_host_live', return_value=(False, '')), \
+            patch.object(Systeminfo, 'probe', return_value=None), \
+            patch.object(BootcProgress, 'start', side_effect=AssertionError('installation forbidden')):
+        window = BootcWindow(application=application)
+        window.present()
+        from gi.repository import GLib
+        for _ in range(50):
+            while GLib.MainContext.default().pending():
+                GLib.MainContext.default().iteration(False)
+        assert window.get_mapped(), 'real wizard did not map'
+        assert window.carousel.get_n_pages() >= 2
+        pages = window._BootcWindow__builder.widgets
+        welcome_page = next(page for page in pages if isinstance(page, BootcDefaultWelcome))
+        assert identity.name in welcome_page.page_header.title
+        assert welcome_page.page_header._icon.get_paintable() is not None
+        from bootc_installer.defaults.image import BootcDefaultImage
+        image_page = next(page for page in pages if isinstance(page, BootcDefaultImage))
+        assert image_page.get_finals()['selected_image'] == 'localhost/qualification/example:latest'
+        window.close()
+print(json.dumps({'packaged_window': 'pass', 'catalog_root_leaf': True,
+                  'installation_executed': False}))
