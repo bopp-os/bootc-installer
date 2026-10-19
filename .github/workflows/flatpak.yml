@@ -157,6 +157,7 @@ jobs:
           sudo mkdir -p /etc/bootc-installer /usr/share/pixmaps
           printf '%s\n' '{"name":"Example Packaged Remix","logo":"/usr/share/pixmaps/example fork #1.svg"}' | sudo tee /etc/bootc-installer/branding.json
           printf '%s\n' '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60"><rect width="120" height="60" fill="#13b97d"/></svg>' | sudo tee '/usr/share/pixmaps/example fork #1.svg'
+          printf '%s\n' '{"default_image":"localhost/qualification/example:latest","fallback_flatpaks":[],"images":[{"name":"Example Packaged Remix","imgref":"localhost/qualification/example:latest","composefs":true,"bootloader":"systemd","filesystem":"ext4"}]}' | sudo tee /etc/bootc-installer/images.json
       - name: Decode host logo with installed sandbox widgets
         run: |
           set -o pipefail
