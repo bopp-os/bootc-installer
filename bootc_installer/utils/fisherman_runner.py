@@ -1,9 +1,11 @@
 """Host execution boundary for the privileged fisherman helper."""
 
+import hashlib
 import logging
 import os
 import shutil
 import stat
+import subprocess
 
 logger = logging.getLogger("Installer::FishermanRunner")
 
@@ -19,8 +21,23 @@ def default_stage_base() -> str:
     )
 
 
+def default_cache_dir() -> str:
+    """Use Flatpak's persistent app cache, not its possibly private HOME.
+
+    --filesystem=host does not expose /var/home on every host. Flatpak always
+    shares the app-specific XDG_CACHE_HOME with the host; a synthetic
+    HOME/.cache can instead live only in the current sandbox's tmpfs.
+    """
+    cache_home = os.environ.get("XDG_CACHE_HOME") if IN_FLATPAK else None
+    if IN_FLATPAK:
+        if not cache_home or not os.path.isabs(cache_home):
+            raise ValueError("Flatpak XDG_CACHE_HOME must be an absolute path")
+        return os.path.join(cache_home, "bootc-installer")
+    return os.path.join(default_stage_base(), ".cache", "bootc-installer")
+
+
 STAGE_BASE = default_stage_base()
-CACHE_DIR = os.path.join(STAGE_BASE, ".cache", "bootc-installer")
+CACHE_DIR = default_cache_dir()
 HOST_PATH = os.path.join(CACHE_DIR, "fisherman")
 LOG_PATH = os.path.join(CACHE_DIR, "fisherman-output.log")
 
@@ -122,13 +139,25 @@ def stage_on_host(
         if not path_is_private(path):
             return False
 
-    os.makedirs(cache_dir, mode=0o700, exist_ok=True)
     source = os.environ.get("BOOTC_FISHERMAN_PATH", "/app/bin/fisherman")
     try:
+        os.makedirs(cache_dir, mode=0o700, exist_ok=True)
         shutil.copy2(source, host_path)
         os.chmod(host_path, stat.S_IRWXU)
-        logger.info("Staged fisherman binary to %s", host_path)
+        # Copy success inside the sandbox is not proof that pkexec/probe can
+        # see the same bytes. Verify through the actual host execution portal
+        # before any caller is allowed to use the staged helper.
+        with open(source, "rb") as packaged:
+            expected = hashlib.file_digest(packaged, "sha256").hexdigest()
+        visible = subprocess.run(
+            ["flatpak-spawn", "--host", "sha256sum", "--", host_path],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+        if visible.returncode or visible.stdout.split(maxsplit=1)[:1] != [expected]:
+            logger.error("Staged fisherman is not byte-identical on the host: %s", host_path)
+            return False
+        logger.info("Staged and host-verified fisherman binary to %s", host_path)
         return True
-    except OSError as error:
+    except (OSError, subprocess.SubprocessError) as error:
         logger.error("Failed to stage fisherman binary: %s", error)
         return False

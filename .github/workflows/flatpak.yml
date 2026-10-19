@@ -165,9 +165,19 @@ jobs:
             --env=GTK_A11Y=none --env=NO_AT_BRIDGE=1 \
             --command=python3 org.bootcinstaller.Installer - \
             < tests/packaged/branding-gnome.py | tee packaged-branding.json
+      - name: Verify host helper with private sandbox home
+        run: |
+          set -o pipefail
+          for phase in stage verify; do
+            dbus-run-session -- flatpak run --user --nofilesystem=host \
+              --command=python3 org.bootcinstaller.Installer - "$phase" \
+              < tests/packaged/host-staging-gnome.py | tee -a packaged-staging.json
+          done
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: packaged-gnome-branding-proof
-          path: packaged-branding.json
+          path: |
+            packaged-branding.json
+            packaged-staging.json
           if-no-files-found: warn

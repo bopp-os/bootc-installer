@@ -49,7 +49,7 @@ GTK4/Adwaita GUI that collects user choices, builds a recipe, and pipes it to fi
 **Flatpak sandbox constraints:**
 - fisherman runs on the **host** via `flatpak-spawn --host pkexec <path>`.
 - Reboot must use `flatpak-spawn --host systemctl reboot`.
-- fisherman is staged to `~/.cache/bootc-installer/fisherman` on the host.
+- In Flatpak, fisherman is staged to `$XDG_CACHE_HOME/bootc-installer/fisherman` (the persistent application cache) and its SHA256 is verified through the host portal before execution. Native execution still uses `/usr/local/bin/fisherman`. Do not derive a Flatpak staging path from `HOME/.cache`: `/var/home` may be private to one sandbox even with `--filesystem=host`.
 
 ## fisherman submodule workflow
 
