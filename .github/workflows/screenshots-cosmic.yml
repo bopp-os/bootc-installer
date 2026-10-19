@@ -18,6 +18,7 @@ on:
     paths:
       - "shared/branding/**"
       - "frontends/cosmic/src/**"
+      - "frontends/cosmic/tests/**"
       - "frontends/cosmic/Cargo.toml"
       - "frontends/cosmic/Cargo.lock"
       - ".github/workflows/screenshots-cosmic.yml"
@@ -25,6 +26,7 @@ on:
     paths:
       - "shared/branding/**"
       - "frontends/cosmic/src/**"
+      - "frontends/cosmic/tests/**"
       - "frontends/cosmic/Cargo.toml"
       - "frontends/cosmic/Cargo.lock"
       - ".github/workflows/screenshots-cosmic.yml"
@@ -64,7 +66,7 @@ jobs:
             libinput-dev libudev-dev libgbm-dev libegl1-mesa-dev libssl-dev \
             mesa-vulkan-drivers libvulkan1 \
             adwaita-icon-theme \
-            xvfb imagemagick
+            xvfb imagemagick python3-pil
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -144,6 +146,9 @@ jobs:
           fi
           echo "ok: gate rejected the blank render"
 
+      - name: self-test the branding pixel gate
+        run: python3 tests/check-branding-capture.py --self-test
+
       - name: capture the shared fork branding with a file logo
         env:
           RUST_LOG: warn
@@ -152,16 +157,11 @@ jobs:
             [ -e "$f" ] && export VK_ICD_FILENAMES="$f" && break
           done
           export XDG_RUNTIME_DIR="$(mktemp -d)"; chmod 700 "$XDG_RUNTIME_DIR"
-          export TUNA_CAPTURE_DIR="$(mktemp -d)"
-          export BOOTC_INSTALLER_BRANDING="$(mktemp)"
-          python3 - <<'PYBRANDING'
-          import json, os
-          from pathlib import Path
-          data = json.loads(Path("../../shared/branding/fixtures/fork-branding.json").read_text())
-          data["logo"] = str(Path("data/icons/hicolor/scalable/apps/org.tunaos.InstallerCosmic.svg").resolve())
-          Path(os.environ["BOOTC_INSTALLER_BRANDING"]).write_text(json.dumps(data))
-          PYBRANDING
+          export TUNA_CAPTURE_DIR="$PWD/docs/screenshots/fork-branding"
+          export BOOTC_INSTALLER_BRANDING="$TUNA_CAPTURE_DIR/branding.json"
+          python3 tests/check-branding-capture.py prepare "$TUNA_CAPTURE_DIR"
           xvfb-run -a -s "-screen 0 1400x1000x24" ./target/release/tuna-installer-cosmic
+          python3 tests/check-branding-capture.py check "$TUNA_CAPTURE_DIR"
 
       - name: build the animated walkthrough
         run: |
