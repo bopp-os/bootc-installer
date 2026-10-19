@@ -27,7 +27,7 @@ harness does not read its widget text yet) · ⏳ no capture on record.
 | KDE Plasma | 7 | 7 | 6 | tests/capture.cpp (Kirigami/QML, offscreen) |
 | COSMIC | 7 | 7 | 6 | src/capture.rs (libcosmic on lavapipe under Xvfb) |
 | Niri | 7 | 7 | 6 | tests/gui/capture-screens.py (QML via PyQt6, offscreen) |
-| XFCE | 9 | 9 | 7 | tests/gui/capture-screens.py (GTK3 under Xvfb) |
+| XFCE | 9 | 9 | 8 | tests/gui/capture-screens.py (GTK3 under Xvfb) |
 
 ## GNOME
 
@@ -74,7 +74,7 @@ libcosmic / iced (Rust). Source: `frontends/cosmic/`.
 |---|---|
 | <img src="cosmic/01-welcome.png" width="360"> | **welcome**  <br><sub>Welcome to TunaOS Welcome. This assistant will guide you through installing TunaOS onto this computer. You will choose a target disk and a f</sub> |
 | <img src="cosmic/02-disk.png" width="360"> | **disk**  <br><sub>Select a disk Everything on the disk you pick will be erased. Samsung SSD 870 EVO 500GB /dev/sda · 465.8 GiB · SATA Extreme SSD /dev/sdc · 9</sub> |
-| <img src="cosmic/03-options.png" width="360"> | **options**  <br><sub>Options Sensible defaults are already chosen. Change them only if you need to. System Computer name ubuntu Filesystem xfs Encryption Disk en</sub> |
+| <img src="cosmic/03-options.png" width="360"> | **options**  <br><sub>Options Sensible defaults are already chosen. Change them only if you need to. System Computer name tunaos Filesystem xfs Encryption Disk en</sub> |
 | <img src="cosmic/04-confirm.png" width="360"> | **confirm**  <br><sub>Confirm installation The last screen before anything is written. Everything on /dev/sda will be erased. This cannot be undone.  Summary Targ</sub> |
 | <img src="cosmic/05-installing.png" width="360"> | **installing**  <br><sub>Installing TunaOS… fisherman is writing the image to disk. [1/8] Partitioning disk
 [2/8] Formatting EFI partition

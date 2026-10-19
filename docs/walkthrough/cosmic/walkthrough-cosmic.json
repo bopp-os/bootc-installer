@@ -115,8 +115,8 @@
       "colours": 211,
       "flat": 0.7590843953119403,
       "ink": 0.9929755872869646,
-      "stddev": 0.06559876982978931,
-      "text_excerpt": "Options Sensible defaults are already chosen. Change them only if you need to. System Computer name ubuntu Filesystem xfs Encryption Disk encryption No encryption Anyone with the disk can read your files. Back Continue"
+      "stddev": 0.06545220817179427,
+      "text_excerpt": "Options Sensible defaults are already chosen. Change them only if you need to. System Computer name tunaos Filesystem xfs Encryption Disk encryption No encryption Anyone with the disk can read your files. Back Continue"
     },
     {
       "name": "confirm",
@@ -124,9 +124,9 @@
       "rendered": true,
       "colours": 307,
       "flat": 0.5778954910691437,
-      "ink": 0.9908900148421107,
-      "stddev": 0.07411911963432745,
-      "text_excerpt": "Confirm installation The last screen before anything is written. Everything on /dev/sda will be erased. This cannot be undone.  Summary Target disk /dev/sda Filesystem xfs Encryption No encryption Computer name ubuntu Image ghcr.io/example/"
+      "ink": 0.9909028097650853,
+      "stddev": 0.07404083447046753,
+      "text_excerpt": "Confirm installation The last screen before anything is written. Everything on /dev/sda will be erased. This cannot be undone.  Summary Target disk /dev/sda Filesystem xfs Encryption No encryption Computer name tunaos Image ghcr.io/example/"
     },
     {
       "name": "installing",
@@ -161,9 +161,9 @@
   ],
   "transition_pixels": [
     389212,
-    250664,
-    240645,
-    177378,
+    250653,
+    240641,
+    177362,
     347534,
     24670
   ],

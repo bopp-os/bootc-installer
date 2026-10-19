@@ -9,13 +9,13 @@
   "ocr": false,
   "pages": [
     {
-      "colours": 246,
-      "flat": 0.9856467968585442,
-      "ink": 0.013104444377576505,
+      "colours": 316,
+      "flat": 0.9828032377456143,
+      "ink": 0.015406373183281677,
       "name": "01-welcome",
       "png": "docs/screenshots/01-welcome.png",
       "rendered": true,
-      "stddev": 0.062404648617739374
+      "stddev": 0.06020354856674035
     },
     {
       "colours": 499,
@@ -36,13 +36,13 @@
       "stddev": 0.057747395233248025
     },
     {
-      "colours": 295,
+      "colours": 293,
       "flat": 0.6940089669906419,
-      "ink": 0.30207925856829054,
+      "ink": 0.30206421328197874,
       "name": "04-confirm",
       "png": "docs/screenshots/04-confirm.png",
       "rendered": true,
-      "stddev": 0.05333764374652476
+      "stddev": 0.053324487871941946
     },
     {
       "colours": 375,
@@ -54,22 +54,22 @@
       "stddev": 0.07601040858224951
     },
     {
-      "colours": 170,
-      "flat": 0.9908223753498029,
-      "ink": 0.005837571088977823,
+      "colours": 280,
+      "flat": 0.9886107182619686,
+      "ink": 0.007296963861222279,
       "name": "06-done",
       "png": "docs/screenshots/06-done.png",
       "rendered": true,
-      "stddev": 0.04644005529649656
+      "stddev": 0.04285794906291881
     },
     {
-      "colours": 310,
-      "flat": 0.9709776427045407,
-      "ink": 0.0202509553756808,
+      "colours": 406,
+      "flat": 0.9686907591851472,
+      "ink": 0.021890891583666836,
       "name": "07-recovery",
       "png": "docs/screenshots/07-recovery.png",
       "rendered": true,
-      "stddev": 0.05838722772006814
+      "stddev": 0.056193518926361596
     }
   ],
   "rendered_frames": 7,
@@ -153,10 +153,10 @@
   "transition_pixels": [
     174424,
     122887,
-    117851,
+    117830,
     393192,
     498374,
-    15001
+    16793
   ],
   "visual_states": 7
 }
