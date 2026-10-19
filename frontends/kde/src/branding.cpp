@@ -6,6 +6,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QRegularExpression>
+#include <QUrl>
 
 namespace branding {
 
@@ -96,6 +97,29 @@ const QStringList &assetKeys()
 }
 
 } // namespace
+
+Logo resolveLogo(const QString &spec, bool inFlatpak)
+{
+    const QString value = spec.trimmed();
+    if (value.isEmpty())
+        return {};
+    if (!value.startsWith(QLatin1Char('/'))) {
+        // Kirigami also understands remote URLs. The portable branding
+        // contract does not; invalid names must not cause network requests.
+        if (value.contains(QLatin1Char('/')) || value.contains(QLatin1Char(':')))
+            return {};
+        return {Logo::Kind::Theme, value};
+    }
+    const bool hostPath = value.startsWith(QStringLiteral("/usr/"))
+        || value.startsWith(QStringLiteral("/etc/"));
+    return {Logo::Kind::File,
+            inFlatpak && hostPath ? QStringLiteral("/run/host") + value : value};
+}
+
+QString Logo::source() const
+{
+    return kind == Kind::File ? QUrl::fromLocalFile(value).toString(QUrl::FullyEncoded) : value;
+}
 
 QHash<QString, QString> copyDefaults()
 {

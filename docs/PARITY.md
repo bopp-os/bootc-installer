@@ -69,6 +69,7 @@ claimed a render that nobody had wired up.
 | `done_failed_title` | page header | heading | title2 | heading | headline |
 | `validate_*` | error line under the hostname (disk and confirm pages) and the username | inline message on the encryption step (passphrase) and the confirm step (hostname) | hostname row description; encryption row description | line under the hostname (confirm) and under the passphrase | line under the hostname, the username and the encryption choice |
 | `store_label` | done page link to `store_url` (+ QR from `assets.store_qr`, US locale) | done page link | done page link | done page link | done page link |
+| `logo` | product icon (GNOME file adapter tracked separately) | theme/file on welcome and successful done | theme/file on welcome and successful done | theme/file on welcome and successful done | theme/file/resource on welcome and successful done |
 | `assets.welcome_image`, `assets.complete_image` | tour pages | no | no | welcome logo disc (`logo`) | no |
 
 The eight `encryption_*` keys name the four types of encryption in the

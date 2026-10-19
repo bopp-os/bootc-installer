@@ -358,6 +358,37 @@ def main():
 
         findings.append(finding)
 
+    # Runtime regression for the same portable file-logo contract as every
+    # frontend. PNG avoids depending on a platform's optional SVG plugin.
+    from PyQt6.QtGui import QColor, QImage
+    logo_path = os.path.join(out, "fixture logo #1.png")
+    logo = QImage(32, 32, QImage.Format.Format_ARGB32)
+    logo.fill(QColor("#13b97d"))
+    assert logo.save(logo_path)
+    root.setProperty("branding", {
+        "name": "Example Fork", "logoKind": "file",
+        "logoValue": QUrl.fromLocalFile(os.path.abspath(logo_path)).toString(),
+    })
+    root.setProperty("recoveryKey", "")
+    for page, name in [(0, "welcomeBrandingLogo"), (5, "doneBrandingLogo")]:
+        root.setProperty("currentPage", page)
+        root.setProperty("installSuccess", True)
+        settle(300)
+        item = find_item(window.contentItem(), name)
+        assert item is not None and item.property("visible"), name + " failed to decode"
+        image = window.grabWindow()
+        image.save(os.path.join(out, "branding-" + str(page) + ".png"))
+        assert any(image.pixelColor(x, y).name() == "#13b97d"
+                   for y in range(image.height()) for x in range(image.width())), "logo pixels missing"
+    root.setProperty("installSuccess", False)
+    settle(100)
+    assert not find_item(window.contentItem(), "doneBrandingLogo").property("visible")
+    root.setProperty("branding", {"name": "Example Fork", "logoKind": "file",
+                                  "logoValue": "file:///nonexistent/branding-logo.png"})
+    root.setProperty("currentPage", 0)
+    settle(100)
+    assert not find_item(window.contentItem(), "welcomeBrandingLogo").property("visible")
+
     failures = []
     for f in findings:
         print(f"  {f['name']:14s} {f['w']}x{f['h']}  colours {f['colours']:5d}  "

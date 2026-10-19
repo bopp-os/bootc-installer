@@ -91,5 +91,24 @@
     "os_release": "os-release",
     "name_override": "Docs Product",
     "expect_name": "Docs Product"
+  },
+  "fork_branding": {
+    "branding": "fork-branding.json",
+    "os_release": "os-release",
+    "expect": {
+      "name": "Example Remix",
+      "id": "exampleos",
+      "vendor": "Example OS",
+      "home_url": "https://remix.example.org/",
+      "docs_url": "https://remix.example.org/docs/",
+      "support_url": "https://remix.example.org/help/",
+      "logo": "/usr/share/example/logo.svg",
+      "default_hostname": "reef",
+      "default_image": ""
+    },
+    "expect_copy": {
+      "welcome_title": "Welcome to {name}",
+      "done_title": "{name} is installed"
+    }
   }
 }

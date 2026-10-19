@@ -178,3 +178,34 @@ func TestText(t *testing.T) {
 		t.Errorf("Text name: %q", got)
 	}
 }
+
+func TestLogoPathFixtures(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(fixturesDir, "logo-paths.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixtures struct {
+		Cases []struct {
+			Spec      string `json:"spec"`
+			InFlatpak bool   `json:"in_flatpak"`
+			Kind      string `json:"kind"`
+			Value     string `json:"value"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(data, &fixtures); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range fixtures.Cases {
+		kind, value := resolveLogo(c.Spec, c.InFlatpak)
+		if kind != c.Kind || value != c.Value {
+			t.Errorf("resolveLogo(%q, %v) = (%q, %q), want (%q, %q)", c.Spec, c.InFlatpak, kind, value, c.Kind, c.Value)
+		}
+	}
+}
+
+func TestLogoURLPreservesSpecialCharacters(t *testing.T) {
+	b := (Branding{Logo: "/usr/share/logo with spaces #1.svg"}).withLogo(true)
+	if b.LogoKind != "file" || b.LogoValue != "file:///run/host/usr/share/logo%20with%20spaces%20%231.svg" {
+		t.Fatalf("unexpected logo URL: %+v", b)
+	}
+}

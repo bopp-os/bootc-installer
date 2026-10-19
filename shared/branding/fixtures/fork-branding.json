@@ -1,0 +1,7 @@
+{
+  "name": "Example Remix",
+  "logo": "/usr/share/example/logo.svg",
+  "home_url": "https://remix.example.org/",
+  "docs_url": "https://remix.example.org/docs/",
+  "support_url": "https://remix.example.org/help/"
+}

@@ -11,12 +11,14 @@ on:
   push:
     branches: [dev]
     paths:
+      - "shared/branding/**"
       - "frontends/xfce/tuna_installer_xfce/**"
       - "frontends/xfce/tests/gui/**"
       - "shared/walkthrough/**"
       - ".github/workflows/screenshots-xfce.yml"
   pull_request:
     paths:
+      - "shared/branding/**"
       - "frontends/xfce/tuna_installer_xfce/**"
       - "frontends/xfce/tests/gui/**"
       - "shared/walkthrough/**"

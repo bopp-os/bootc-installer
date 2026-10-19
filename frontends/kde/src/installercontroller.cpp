@@ -33,6 +33,7 @@ InstallerController::InstallerController(QObject *parent)
     // os-release, then neutral. Nothing in this frontend names a product.
     m_branding = branding::resolve();
     m_productName = m_branding.name;
+    m_logoSource = branding::resolveLogo(m_branding.logo, offline::inFlatpak()).source();
     m_recipe.distroID = m_branding.id;
     m_recipe.hostname = m_branding.defaultHostname;
 

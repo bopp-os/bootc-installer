@@ -9,6 +9,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gdk, GLib, Gtk, Pango
 
 from . import core, fisherman_validate, progress_parser
+from .logo import product_logo
 
 # The recipe's encryption types, in display order: fisherman's
 # encryption-choices.json (core.ENCRYPTION_CHOICES), which
@@ -93,6 +94,9 @@ class WelcomePage(Page):
 
     def __init__(self, win):
         super().__init__(win)
+        self.logo = product_logo(core.BRANDING.logo, core.IN_FLATPAK)
+        self.pack_start(self.logo, False, False, 0)
+        self.reorder_child(self.logo, 0)
         subtitle = core.BRANDING.text("welcome_subtitle")
         if subtitle:
             sub = Gtk.Label(label=subtitle, xalign=0)
@@ -589,6 +593,9 @@ class ProgressPage(Page):
 class DonePage(Page):
     def __init__(self, win):
         super().__init__(win)
+        self.logo = product_logo(core.BRANDING.logo, core.IN_FLATPAK)
+        self.logo.hide()
+        self.pack_start(self.logo, False, False, 0)
         self.headline = _page_title("")
         self.pack_start(self.headline, False, False, 0)
         self.body = Gtk.Label(xalign=0)
@@ -671,6 +678,7 @@ class DonePage(Page):
     def set_result(self, ok, log_tail, recovery_key=""):
         # A failed install never enrolled a TPM, so there is no key to show.
         self.show_recovery_key(recovery_key if ok else "")
+        self.logo.set_visible(ok and self.logo.get_pixbuf() is not None)
         if ok:
             self.headline.set_markup("<big><b>" + GLib.markup_escape_text(
                 core.BRANDING.text("done_title")) + "</b></big>")

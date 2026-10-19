@@ -15,6 +15,7 @@ package main
 import (
 	_ "embed"
 	"encoding/json"
+	"net/url"
 	"os"
 	"strings"
 )
@@ -58,6 +59,8 @@ type Branding struct {
 	SupportURL      string              `json:"supportUrl"`
 	StoreURL        string              `json:"storeUrl"`
 	Logo            string              `json:"logo"`
+	LogoKind        string              `json:"logoKind"`
+	LogoValue       string              `json:"logoValue"`
 	DefaultHostname string              `json:"defaultHostname"`
 	DefaultImage    string              `json:"defaultImage"`
 	Copy            map[string]string   `json:"copy"`
@@ -97,7 +100,17 @@ func resolveBranding() Branding {
 	if p := strings.TrimSpace(os.Getenv(brandingEnvFile)); p != "" {
 		paths = []string{p}
 	}
-	return resolveBrandingFrom(paths, osReleasePaths, os.Getenv(brandingEnvName))
+	b := resolveBrandingFrom(paths, osReleasePaths, os.Getenv(brandingEnvName))
+	_, err := os.Stat("/.flatpak-info")
+	return b.withLogo(err == nil)
+}
+
+func (b Branding) withLogo(inFlatpak bool) Branding {
+	b.LogoKind, b.LogoValue = resolveLogo(b.Logo, inFlatpak)
+	if b.LogoKind == "file" {
+		b.LogoValue = (&url.URL{Scheme: "file", Path: b.LogoValue}).String()
+	}
+	return b
 }
 
 func resolveBrandingFrom(filePaths, osrPaths []string, nameOverride string) Branding {
@@ -256,4 +269,22 @@ func unquoteShell(v string) string {
 		}
 		return v
 	}
+}
+
+// resolveLogo implements shared/branding/fixtures/logo-paths.json. Return raw
+// paths here; the runtime adapter URL-escapes them before sending them to QML.
+func resolveLogo(spec string, inFlatpak bool) (string, string) {
+	if spec == "" {
+		return "none", ""
+	}
+	if strings.HasPrefix(spec, "/") {
+		if inFlatpak && (strings.HasPrefix(spec, "/usr/") || strings.HasPrefix(spec, "/etc/")) {
+			spec = "/run/host" + spec
+		}
+		return "file", spec
+	}
+	if strings.ContainsAny(spec, "/:") {
+		return "none", ""
+	}
+	return "theme", spec
 }

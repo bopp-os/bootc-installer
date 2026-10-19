@@ -72,6 +72,9 @@ class InstallerController : public QObject
     // user-visible string reads this; nothing names a product. CONSTANT: the
     // files cannot change under a running installer.
     Q_PROPERTY(QString productName READ productName CONSTANT)
+    // Theme icon name or safely encoded local URL, using the host path only
+    // when sandboxed. Welcome and successful completion share this source.
+    Q_PROPERTY(QString logoSource READ logoSource CONSTANT)
     // Flavour text from the branding contract (shared/branding copy keys),
     // {name} already filled in; {disk} through text(). CONSTANT like the name.
     Q_PROPERTY(QVariantMap copy READ copy CONSTANT)
@@ -147,6 +150,7 @@ public:
     // Takes in fisherman's answer (validate --json stdout). Public for tests.
     void applyValidateAnswer(const QByteArray &stdoutData);
     QString productName() const { return m_productName; }
+    QString logoSource() const { return m_logoSource; }
     QVariantMap copy() const { return m_branding.copyAsVariantMap(); }
     QString storeUrl() const { return m_branding.storeUrl; }
     // A copy line with {name} and {disk} filled in.
@@ -262,6 +266,7 @@ private:
     bool m_hasTpm = false;
     QStringList m_unmet;
     QString m_productName;
+    QString m_logoSource;
     branding::Branding m_branding;
     int m_exitCode = 0;
 };

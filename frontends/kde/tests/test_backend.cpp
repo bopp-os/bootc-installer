@@ -19,6 +19,7 @@
 #include <QProcessEnvironment>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QUrl>
 
 #include <csignal>
 #include <unistd.h>
@@ -35,6 +36,9 @@ private slots:
     void recipeValidation();
     void recipeJsonRoundTrip();
     void brandingFixtures();
+    void brandingLogoFixtures();
+    void brandingLogoSourceEscapesFilenames();
+    void brandingLogoReachesController();
     void brandingText();
     void brandingNothingReadableIsNeutral();
     void encryptionChoicesReadTheCopyLayer();
@@ -303,6 +307,60 @@ void BackendTest::brandingFixtures()
     // The compiled-in defaults are the shared file, verbatim.
     QCOMPARE(QString::fromUtf8(kCopyDefaultsJson), readText(dir + QStringLiteral("/../copy-defaults.json")));
     QVERIFY(!branding::copyDefaults().value(QStringLiteral("welcome_title")).isEmpty());
+}
+
+void BackendTest::brandingLogoFixtures()
+{
+    const QString path = QStringLiteral(BRANDING_FIXTURES_DIR) + QStringLiteral("/logo-paths.json");
+    const QJsonArray cases = readJsonObject(path).value(QStringLiteral("cases")).toArray();
+    QVERIFY2(!cases.isEmpty(), qPrintable(QStringLiteral("Missing logo fixtures: ") + path));
+    for (const QJsonValue &entry : cases) {
+        const QJsonObject spec = entry.toObject();
+        const branding::Logo got = branding::resolveLogo(
+            spec.value(QStringLiteral("spec")).toString(), spec.value(QStringLiteral("in_flatpak")).toBool());
+        const QString kind = got.kind == branding::Logo::Kind::File ? QStringLiteral("file")
+            : got.kind == branding::Logo::Kind::Theme ? QStringLiteral("theme") : QStringLiteral("none");
+        QCOMPARE(kind, spec.value(QStringLiteral("kind")).toString());
+        QCOMPARE(got.value, spec.value(QStringLiteral("value")).toString());
+        if (got.kind == branding::Logo::Kind::File)
+            QCOMPARE(QUrl(got.source()).toLocalFile(), got.value);
+        else
+            QCOMPARE(got.source(), got.value);
+    }
+}
+
+void BackendTest::brandingLogoSourceEscapesFilenames()
+{
+    const QString path = QStringLiteral("/tmp/logo with spaces #1%20?.png");
+    const branding::Logo logo = branding::resolveLogo(path, false);
+    QCOMPARE(logo.source(), QStringLiteral("file:///tmp/logo%20with%20spaces%20%231%2520%3F.png"));
+    QCOMPARE(QUrl(logo.source()).toLocalFile(), path);
+    QVERIFY(branding::resolveLogo(QStringLiteral("  "), true).source().isEmpty());
+    QCOMPARE(branding::resolveLogo(QStringLiteral(" example-logo "), true).source(),
+             QStringLiteral("example-logo"));
+    QCOMPARE(branding::resolveLogo(QStringLiteral("/usr-local/logo.svg"), true).value,
+             QStringLiteral("/usr-local/logo.svg"));
+    QVERIFY(branding::resolveLogo(QStringLiteral("https://example.com/logo.png"), false).source().isEmpty());
+}
+
+void BackendTest::brandingLogoReachesController()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QFile f(dir.filePath(QStringLiteral("branding.json")));
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write(R"({"logo": "/usr/share/example/logo with spaces #1.svg"})");
+    f.close();
+    const QByteArray previous = qgetenv("BOOTC_INSTALLER_BRANDING");
+    qputenv("BOOTC_INSTALLER_BRANDING", f.fileName().toUtf8());
+    InstallerController controller;
+    if (previous.isNull())
+        qunsetenv("BOOTC_INSTALLER_BRANDING");
+    else
+        qputenv("BOOTC_INSTALLER_BRANDING", previous);
+    QCOMPARE(controller.logoSource(), branding::resolveLogo(
+        QStringLiteral("/usr/share/example/logo with spaces #1.svg"), offline::inFlatpak()).source());
+    QCOMPARE(controller.property("logoSource").toString(), controller.logoSource());
 }
 
 void BackendTest::encryptionChoicesReadTheCopyLayer()

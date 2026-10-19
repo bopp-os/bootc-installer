@@ -16,12 +16,14 @@ on:
   push:
     branches: [dev]
     paths:
+      - "shared/branding/**"
       - "frontends/cosmic/src/**"
       - "frontends/cosmic/Cargo.toml"
       - "frontends/cosmic/Cargo.lock"
       - ".github/workflows/screenshots-cosmic.yml"
   pull_request:
     paths:
+      - "shared/branding/**"
       - "frontends/cosmic/src/**"
       - "frontends/cosmic/Cargo.toml"
       - "frontends/cosmic/Cargo.lock"
@@ -73,6 +75,9 @@ jobs:
       - name: build
         run: cargo build --release
 
+      - name: test shared branding contract
+        run: cargo test --release branding::tests
+
       - name: capture every screen
         env:
           TUNA_CAPTURE_DIR: docs/screenshots
@@ -81,6 +86,7 @@ jobs:
           # which on this runner is Ubuntu. Pin the neutral product name for
           # the committed walkthrough; the step below exercises the real path.
           BOOTC_INSTALLER_PRODUCT_NAME: TunaOS
+          BOOTC_INSTALLER_BRANDING: ${{ github.workspace }}/shared/walkthrough/capture-branding.json
           # Disks, TPM and requirements come from the shared probe fixture
           # (shared/probe/fixtures/laptop.json, src/capture.rs). Its TPM 2.0
           # is usable, so all four encryption choices render.
@@ -137,6 +143,25 @@ jobs:
             exit 1
           fi
           echo "ok: gate rejected the blank render"
+
+      - name: capture the shared fork branding with a file logo
+        env:
+          RUST_LOG: warn
+        run: |
+          for f in /usr/share/vulkan/icd.d/lvp_icd*.json; do
+            [ -e "$f" ] && export VK_ICD_FILENAMES="$f" && break
+          done
+          export XDG_RUNTIME_DIR="$(mktemp -d)"; chmod 700 "$XDG_RUNTIME_DIR"
+          export TUNA_CAPTURE_DIR="$(mktemp -d)"
+          export BOOTC_INSTALLER_BRANDING="$(mktemp)"
+          python3 - <<'PYBRANDING'
+          import json, os
+          from pathlib import Path
+          data = json.loads(Path("../../shared/branding/fixtures/fork-branding.json").read_text())
+          data["logo"] = str(Path("data/icons/hicolor/scalable/apps/org.tunaos.InstallerCosmic.svg").resolve())
+          Path(os.environ["BOOTC_INSTALLER_BRANDING"]).write_text(json.dumps(data))
+          PYBRANDING
+          xvfb-run -a -s "-screen 0 1400x1000x24" ./target/release/tuna-installer-cosmic
 
       - name: build the animated walkthrough
         run: |

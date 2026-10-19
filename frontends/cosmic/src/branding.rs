@@ -90,6 +90,30 @@ fn copy_defaults() -> HashMap<String, String> {
         .unwrap_or_default()
 }
 
+/// The portable logo source shared by every frontend. File values are host
+/// paths, not URLs; URL escaping belongs to the renderer, if it needs it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LogoSource {
+    None,
+    File(String),
+    Theme(String),
+}
+
+pub fn logo_source(spec: &str, in_flatpak: bool) -> LogoSource {
+    if spec.starts_with('/') {
+        let path = if in_flatpak && (spec.starts_with("/usr/") || spec.starts_with("/etc/")) {
+            format!("/run/host{spec}")
+        } else {
+            spec.to_string()
+        };
+        LogoSource::File(path)
+    } else if !spec.is_empty() && !spec.contains('/') && !spec.contains(':') {
+        LogoSource::Theme(spec.to_string())
+    } else {
+        LogoSource::None
+    }
+}
+
 /// The branding for this machine, resolved once.
 pub fn get() -> &'static Branding {
     static BRANDING: OnceLock<Branding> = OnceLock::new();
@@ -288,6 +312,31 @@ mod tests {
             ("default_hostname", b.default_hostname.as_str()),
             ("default_image", b.default_image.as_str()),
         ])
+    }
+
+    #[test]
+    fn shared_logo_paths() {
+        let dir = fixtures().expect("shared branding fixtures must be available");
+        let fixture: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(dir.join("logo-paths.json")).unwrap(),
+        ).unwrap();
+        for case in fixture["cases"].as_array().unwrap() {
+            let expected = match case["kind"].as_str().unwrap() {
+                "file" => LogoSource::File(case["value"].as_str().unwrap().into()),
+                "theme" => LogoSource::Theme(case["value"].as_str().unwrap().into()),
+                "none" => LogoSource::None,
+                other => panic!("unknown logo kind: {other}"),
+            };
+            assert_eq!(logo_source(case["spec"].as_str().unwrap(),
+                case["in_flatpak"].as_bool().unwrap()), expected, "{case}");
+        }
+    }
+
+    #[test]
+    fn logos_never_fetch_remote_or_relative_paths() {
+        for spec in ["https://example.org/logo.svg", "relative/logo.svg", "resource:///logo.svg"] {
+            assert_eq!(logo_source(spec, false), LogoSource::None);
+        }
     }
 
     #[test]

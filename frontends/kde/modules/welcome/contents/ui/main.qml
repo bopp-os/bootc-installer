@@ -27,7 +27,9 @@ TunaComponents.SetupModule {
             spacing: Kirigami.Units.largeSpacing
 
             Kirigami.Icon {
-                source: "drive-harddisk-symbolic"
+                objectName: "welcomeLogo"
+                source: InstallerController.logoSource || "drive-harddisk-symbolic"
+                fallback: "drive-harddisk-symbolic"
                 implicitWidth: Kirigami.Units.iconSizes.enormous
                 implicitHeight: Kirigami.Units.iconSizes.enormous
 
