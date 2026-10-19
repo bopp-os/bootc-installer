@@ -115,7 +115,7 @@
       "colours": 453,
       "flat": 0.6161333333333333,
       "ink": 0.11356666666666666,
-      "stddev": 0.11048502176346062,
+      "stddev": 0.11049312796175044,
       "text_excerpt": "Step 3 of 6 \u00b7 Encryption Disk encryption Encryption protects your files if the disk is lost or stolen. It cannot be turned on later without reinstalling. No encryption Anyone with the disk can read your files. Passphrase You'll type it at e"
     },
     {
@@ -125,7 +125,7 @@
       "colours": 387,
       "flat": 0.6189,
       "ink": 0.025966666666666666,
-      "stddev": 0.09447316775658775,
+      "stddev": 0.09446369542778033,
       "text_excerpt": "Step 4 of 6 \u00b7 Confirm Confirm installation \u26a0  Everything on /dev/sda will be erased. This cannot be undone. Summary Target disk /dev/sda Filesystem xfs Encryption No encryption Hostname tunaos Image ghcr.io/tuna-os/albacore:gnome Back Back "
     },
     {
