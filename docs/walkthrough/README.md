@@ -27,7 +27,7 @@ harness does not read its widget text yet) · ⏳ no capture on record.
 | KDE Plasma | 7 | 7 | 6 | tests/capture.cpp (Kirigami/QML, offscreen) |
 | COSMIC | 7 | 7 | 6 | src/capture.rs (libcosmic on lavapipe under Xvfb) |
 | Niri | 7 | 7 | 6 | tests/gui/capture-screens.py (QML via PyQt6, offscreen) |
-| XFCE | 9 | 9 | 8 | tests/gui/capture-screens.py (GTK3 under Xvfb) |
+| XFCE | 9 | 9 | 7 | tests/gui/capture-screens.py (GTK3 under Xvfb) |
 
 ## GNOME
 
