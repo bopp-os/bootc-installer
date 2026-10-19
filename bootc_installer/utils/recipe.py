@@ -104,7 +104,7 @@ class RecipeLoader:
         file_wins = b.source in ("env", "file")
         if file_wins or not r.get("distro_name"):
             r["distro_name"] = b.name
-        if (file_wins and b.logo) or not r.get("distro_logo"):
+        if b.logo_source == "file" or not r.get("distro_logo"):
             r["distro_logo"] = b.logo or "org.bootcinstaller.Installer"
         # Every flavour line comes from the branding copy layer; the recipe's
         # own welcome_title/welcome_subtitle are honoured only when no
