@@ -1,0 +1,88 @@
+{
+  "cases": [
+    {
+      "spec": "",
+      "in_flatpak": false,
+      "kind": "none",
+      "value": ""
+    },
+    {
+      "spec": "",
+      "in_flatpak": true,
+      "kind": "none",
+      "value": ""
+    },
+    {
+      "spec": "example-logo",
+      "in_flatpak": false,
+      "kind": "theme",
+      "value": "example-logo"
+    },
+    {
+      "spec": "example-logo",
+      "in_flatpak": true,
+      "kind": "theme",
+      "value": "example-logo"
+    },
+    {
+      "spec": "/usr/share/example/logo.svg",
+      "in_flatpak": false,
+      "kind": "file",
+      "value": "/usr/share/example/logo.svg"
+    },
+    {
+      "spec": "/usr/share/example/logo.svg",
+      "in_flatpak": true,
+      "kind": "file",
+      "value": "/run/host/usr/share/example/logo.svg"
+    },
+    {
+      "spec": "/etc/bootc-installer/logo.png",
+      "in_flatpak": false,
+      "kind": "file",
+      "value": "/etc/bootc-installer/logo.png"
+    },
+    {
+      "spec": "/etc/bootc-installer/logo.png",
+      "in_flatpak": true,
+      "kind": "file",
+      "value": "/run/host/etc/bootc-installer/logo.png"
+    },
+    {
+      "spec": "/app/share/logo.svg",
+      "in_flatpak": false,
+      "kind": "file",
+      "value": "/app/share/logo.svg"
+    },
+    {
+      "spec": "/app/share/logo.svg",
+      "in_flatpak": true,
+      "kind": "file",
+      "value": "/app/share/logo.svg"
+    },
+    {
+      "spec": "/run/host/usr/share/example/logo.svg",
+      "in_flatpak": false,
+      "kind": "file",
+      "value": "/run/host/usr/share/example/logo.svg"
+    },
+    {
+      "spec": "/run/host/usr/share/example/logo.svg",
+      "in_flatpak": true,
+      "kind": "file",
+      "value": "/run/host/usr/share/example/logo.svg"
+    },
+    {
+      "spec": "/tmp/logo with spaces #1.png",
+      "in_flatpak": false,
+      "kind": "file",
+      "value": "/tmp/logo with spaces #1.png"
+    },
+    {
+      "spec": "/tmp/logo with spaces #1.png",
+      "in_flatpak": true,
+      "kind": "file",
+      "value": "/tmp/logo with spaces #1.png"
+    }
+  ]
+}

@@ -38,3 +38,13 @@ def test_gtk_image_dispatch(spec, method, value):
     with patch('bootc_installer.utils.icons.os.path.exists', return_value=True):
         set_image_icon(image, spec)
     getattr(image, method).assert_called_once_with(value)
+
+
+def test_shared_portable_logo_contract():
+    import json
+    from pathlib import Path
+
+    fixture = Path(__file__).resolve().parents[2] / 'shared/branding/fixtures/logo-paths.json'
+    for case in json.loads(fixture.read_text())['cases']:
+        resolved = resolve_icon(case['spec'], in_flatpak=case['in_flatpak'])
+        assert (resolved or ('none', '')) == (case['kind'], case['value'])
