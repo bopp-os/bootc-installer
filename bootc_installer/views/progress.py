@@ -40,15 +40,10 @@ _DEMO_TRANSCRIPT = pathlib.Path(__file__).resolve().parent.parent / "utils" / "d
 # One event per tick, the pace XFCE's dry run uses.
 _DEMO_INTERVAL_MS = 400
 
-# Where to stage fisherman so the host can see it (shared via --filesystem=host)
-#
-# The fallback used to be "/tmp", which put the staging directory — and so the
-# binary this module goes on to run under pkexec — somewhere every local user
-# on the machine can write. Fall back to the per-user runtime directory
-# instead: /run/user/<uid> is created 0700 and owned by the user, so the
-# HOME-unset case degrades to "private to us" rather than "world-writable".
+# Use the same persistent app cache for probe, validation, install and logs.
+# HOME/.cache may belong only to this sandbox on immutable /var/home hosts.
 _FISHERMAN_STAGE_BASE = fisherman_runner.default_stage_base()
-_FISHERMAN_CACHE_DIR = os.path.join(_FISHERMAN_STAGE_BASE, ".cache", "bootc-installer")
+_FISHERMAN_CACHE_DIR = fisherman_runner.default_cache_dir()
 _FISHERMAN_HOST_PATH = os.path.join(_FISHERMAN_CACHE_DIR, "fisherman")
 _FISHERMAN_LOG_PATH = os.path.join(_FISHERMAN_CACHE_DIR, "fisherman-output.log")
 
