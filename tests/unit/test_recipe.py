@@ -246,3 +246,44 @@ class TestRecipePaths(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestEffectiveBranding(unittest.TestCase):
+    def test_recipe_identity_reaches_shared_copy_consumers(self):
+        from types import SimpleNamespace
+
+        from bootc_installer.utils.branding import Branding
+        from bootc_installer.utils.copy import product_name
+        with patch('bootc_installer.utils.recipe.branding.resolve',
+                   return_value=Branding(name='Host OS', logo='host-logo', source='os-release')):
+            recipe = _load_with_custom_recipe(_VALID_RECIPE).raw
+        self.assertEqual(recipe['branding']['name'], 'TestOS')
+        self.assertEqual(recipe['branding']['logo'], '/usr/share/logo.svg')
+        self.assertEqual(product_name(SimpleNamespace(recipe=recipe)), 'TestOS')
+
+    def test_branding_file_overrides_recipe_logo_and_name(self):
+        from bootc_installer.utils.branding import Branding
+        with patch('bootc_installer.utils.recipe.branding.resolve',
+                   return_value=Branding(name='Fork OS', logo='/usr/share/fork.svg', source='file', logo_source='file')):
+            recipe = _load_with_custom_recipe(_VALID_RECIPE).raw
+        self.assertEqual(recipe['distro_name'], 'Fork OS')
+        self.assertEqual(recipe['distro_logo'], '/usr/share/fork.svg')
+        self.assertEqual(recipe['branding']['logo'], '/usr/share/fork.svg')
+
+    def test_logo_only_file_wins_without_renaming_product(self):
+        from bootc_installer.utils.branding import from_sources
+        branding = from_sources({'logo': '/usr/share/fork.svg'}, 'NAME="Host OS"\nLOGO=host-logo')
+        with patch('bootc_installer.utils.recipe.branding.resolve', return_value=branding):
+            recipe = _load_with_custom_recipe(_VALID_RECIPE).raw
+        self.assertEqual(recipe['distro_name'], 'TestOS')
+        self.assertEqual(recipe['distro_logo'], '/usr/share/fork.svg')
+
+    def test_name_override_does_not_replace_recipe_logo_with_host_logo(self):
+        from bootc_installer.utils.branding import from_sources
+        for file_data, name_override in [({'name': 'Fork OS'}, ''), (None, 'Fork OS')]:
+            with self.subTest(file=file_data, env=name_override):
+                branding = from_sources(file_data, 'NAME="Host OS"\nLOGO=host-logo', name_override)
+                with patch('bootc_installer.utils.recipe.branding.resolve', return_value=branding):
+                    recipe = _load_with_custom_recipe(_VALID_RECIPE).raw
+                self.assertEqual(recipe['distro_name'], 'Fork OS')
+                self.assertEqual(recipe['distro_logo'], '/usr/share/logo.svg')

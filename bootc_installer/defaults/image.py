@@ -258,12 +258,8 @@ def _make_icon(icon_spec: str, size: int = 32) -> "Gtk.Image | None":
     img = Gtk.Image()
     img.set_pixel_size(size)
     try:
-        if icon_spec.startswith("resource://"):
-            img.set_from_resource(icon_spec[len("resource://"):])
-        elif icon_spec.startswith("/"):
-            img.set_from_file(icon_spec)
-        else:
-            img.set_from_icon_name(icon_spec)
+        from bootc_installer.utils.icons import set_image_icon
+        set_image_icon(img, icon_spec)
         return img
     except Exception as e:
         logger.warning(f"Could not load icon {icon_spec!r}: {e}")

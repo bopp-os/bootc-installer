@@ -90,7 +90,11 @@ class BootcDefaultWelcome(Adw.Bin):
         self.delta = False
 
         fallback_logo = self.__distro_info.get("logo", "org.bootcinstaller.Installer")
-        icon_spec = self.__distro_info.get("default_image_icon") or fallback_logo
+        # The neutral application icon is only a fallback, not product artwork.
+        catalog_icon = self.__distro_info.get("default_image_icon")
+        icon_spec = (catalog_icon or fallback_logo
+                     if fallback_logo == "org.bootcinstaller.Installer"
+                     else fallback_logo or catalog_icon)
 
         apply_icon(self.page_header, icon_spec)
         welcome_title = self.__distro_info.get("welcome_title") or "bootc Installer"
