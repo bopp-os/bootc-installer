@@ -19,6 +19,8 @@ def resolve_icon(icon_spec, *, in_flatpak=None):
         if in_flatpak and icon_spec.startswith(("/usr/", "/etc/")):
             icon_spec = "/run/host" + icon_spec
         return "file", icon_spec
+    if "/" in icon_spec or ":" in icon_spec:
+        return None  # not a theme name; never fetch a remote or relative URL
     return "theme", icon_spec
 
 

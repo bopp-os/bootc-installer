@@ -83,6 +83,30 @@
       "in_flatpak": true,
       "kind": "file",
       "value": "/tmp/logo with spaces #1.png"
+    },
+    {
+      "spec": "https://example.org/logo.svg",
+      "in_flatpak": false,
+      "kind": "none",
+      "value": ""
+    },
+    {
+      "spec": "https://example.org/logo.svg",
+      "in_flatpak": true,
+      "kind": "none",
+      "value": ""
+    },
+    {
+      "spec": "relative/logo.svg",
+      "in_flatpak": false,
+      "kind": "none",
+      "value": ""
+    },
+    {
+      "spec": "relative/logo.svg",
+      "in_flatpak": true,
+      "kind": "none",
+      "value": ""
     }
   ]
 }
