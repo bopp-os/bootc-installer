@@ -159,8 +159,9 @@ class Processor:
             elif "device" in disk_info:
                 disk_device = disk_info["device"]
             fs = disk_info.get("filesystem", "xfs")
-            if fs in ("xfs", "btrfs"):
-                filesystem = fs
+            if fs not in ("xfs", "ext4", "btrfs", "zfs"):
+                raise ValueError(f"Unsupported root filesystem: {fs!r}")
+            filesystem = fs
             if filesystem == "btrfs":
                 btrfs_subvolumes = disk_info.get("btrfsSubvolumes", False)
         elif isinstance(disk_info, str):
@@ -208,6 +209,7 @@ class Processor:
         # target_imgref is always the remote registry reference written into the
         # installed system so that bootc upgrade tracks the correct upstream image.
         target_imgref = image
+        metadata_imgref = image  # catalog identity before NVIDIA/source overrides
 
         # NVIDIA auto-detection: if the selected image has a nvidia_imgref in the
         # manifest, use the nvidia image as the install source (it's on the ISO)
@@ -238,6 +240,8 @@ class Processor:
         # target_imgref (the remote ref) is passed as --target-imgref unchanged.
         local_imgref = sys_recipe.get("local_imgref", "")
         if local_imgref:
+            if not sys_recipe.get("imgref") or metadata_imgref != sys_recipe["imgref"]:
+                raise ValueError("Local install source does not match the selected system image")
             logger.info(
                 f"local_imgref override: install source={local_imgref}, "
                 f"installed system tracks={target_imgref}"
@@ -259,49 +263,84 @@ class Processor:
         # --- SELinux / unified storage / composefs / image type ---
         selinux_disabled = sys_recipe.get("selinuxDisabled", False)
         unified_storage = sys_recipe.get("unifiedStorage", True)
-        composefs_backend = bool(merged.get("composefs_backend", False))
-        image_type = merged.get("image_type", "bootc") or "bootc"
-        bootloader = merged.get("bootloader", "") or ""
-        image_filesystem = merged.get("image_filesystem", "") or ""
-        flatpak_var_path = merged.get("flatpak_var_path", "") or ""
+        # Resolve each field independently. A selected image's explicit false
+        # is meaningful; missing filesystem metadata must not replace it with
+        # the first catalog image's backend. Live media skips the image step,
+        # so canonical top-level system-recipe fields are the next source.
+        metadata = {}
+        recipe_images = sys_recipe.get("images", [])
+        if not isinstance(recipe_images, list):
+            raise ValueError("System recipe images must be a list")  # noqa: TRY004 - invalid serialized recipe, surfaced in UI
+        if recipe_images:
+            candidates = recipe_images
+        else:
+            etc = "/run/host/etc" if os.path.exists("/.flatpak-info") else "/etc"
+            path = f"{etc}/bootc-installer/images.json"
+            try:
+                with open(path) as stream:
+                    catalog = json.load(stream)
+                if not isinstance(catalog, dict):
+                    raise ValueError("Image catalog must be an object")  # noqa: TRY004 - invalid serialized recipe, surfaced in UI
+                candidates = catalog.get("images", [catalog])
+            except FileNotFoundError:
+                candidates = []
+            except (OSError, ValueError) as error:
+                raise ValueError(f"Cannot read image metadata at {path}: {error}") from error
+        # Match the chosen tracking reference, never a local OCI source or an
+        # unrelated first row. A single metadata-only entry remains supported.
+        def find_metadata(nodes, inherited=None):
+            if not isinstance(nodes, list):
+                raise ValueError("Image metadata must be a list")  # noqa: TRY004 - invalid serialized recipe, surfaced in UI
+            for node in nodes:
+                if not isinstance(node, dict):
+                    raise ValueError("Image metadata entry must be an object")  # noqa: TRY004 - invalid serialized recipe, surfaced in UI
+                context = {**(inherited or {}), **node}
+                reference = node.get("imgref")
+                if not reference and node.get("tag") and context.get("registry"):
+                    reference = f"{context['registry']}:{node['tag']}"
+                if reference == metadata_imgref:
+                    return context
+                if "children" in node:
+                    found = find_metadata(node["children"], context)
+                    if found:
+                        return found
+            return {}
 
-        # Live ISO mode or removed image step: image-level fields are missing
-        # from merged. Check sys_recipe["images"] list first (handles dev mode
-        # and dakota-style recipes where the image step is removed), then fall
-        # back to /etc/bootc-installer/images.json on the host.
-        if not image_filesystem:
-            _recipe_images = sys_recipe.get("images", [])
-            if _recipe_images:
-                _img = _recipe_images[0]
-                image_filesystem  = _img.get("filesystem", "") or ""
-                composefs_backend = bool(_img.get("composefs", composefs_backend))
-                bootloader        = _img.get("bootloader", bootloader) or bootloader
-                flatpak_var_path  = _img.get("flatpak_var_path", flatpak_var_path) or flatpak_var_path
-                logger.info("Recipe images fallback: filesystem=%s composefs=%s bootloader=%s",
-                            image_filesystem, composefs_backend, bootloader)
-            else:
-                _in_flatpak = os.path.exists("/.flatpak-info")
-                _etc = "/run/host/etc" if _in_flatpak else "/etc"
-                _images_json = f"{_etc}/bootc-installer/images.json"
-                try:
-                    with open(_images_json) as _f:
-                        _idata = json.load(_f)
-                    _imgs = _idata.get("images", [_idata]) if "images" in _idata else [_idata]
-                    _img = _imgs[0]
-                    image_filesystem  = _img.get("filesystem", "") or ""
-                    composefs_backend = bool(_img.get("composefs", composefs_backend))
-                    bootloader        = _img.get("bootloader", bootloader) or bootloader
-                    flatpak_var_path  = _img.get("flatpak_var_path", flatpak_var_path) or flatpak_var_path
-                    logger.info("Live ISO fallback from images.json: filesystem=%s composefs=%s bootloader=%s",
-                                image_filesystem, composefs_backend, bootloader)
-                except Exception as _e:
-                    logger.warning("Live ISO: could not read %s: %s", _images_json, _e)
+        metadata = find_metadata(candidates)
+        if (not metadata and len(candidates) == 1
+                and not any(key in candidates[0] for key in ("imgref", "tag", "registry", "children"))):
+            metadata = candidates[0]
 
-        # Image-level filesystem requirement overrides the disk-step selection.
-        if image_filesystem in ("xfs", "btrfs"):
+        def field(ui_key, system_key, image_key, default):
+            for source, key in ((merged, ui_key), (sys_recipe, system_key),
+                                (metadata, image_key)):
+                if key in source and source[key] != "":
+                    return source[key]
+            return default
+
+        composefs_backend = field("composefs_backend", "composeFsBackend", "composefs", False)
+        if not isinstance(composefs_backend, bool):
+            raise ValueError("composeFsBackend must be a boolean")  # noqa: TRY004 - invalid serialized recipe, surfaced in UI
+        image_type = field("image_type", "imageType", "image_type", "bootc")
+        bootloader = field("bootloader", "bootloader", "bootloader", "")
+        image_filesystem = field("image_filesystem", "filesystem", "filesystem", "")
+        flatpak_var_path = field("flatpak_var_path", "flatpakVarPath", "flatpak_var_path", "")
+        for key, value in (("imageType", image_type), ("filesystem", image_filesystem),
+                           ("bootloader", bootloader), ("flatpakVarPath", flatpak_var_path)):
+            if not isinstance(value, str):
+                raise ValueError(f"{key} must be a string")  # noqa: TRY004 - invalid serialized recipe, surfaced in UI
+        if bootloader not in ("", "grub2", "systemd"):
+            raise ValueError(f"Unsupported bootloader: {bootloader!r}")
+        # Image/backend compatibility remains fisherman's validation authority.
+        # Preserve unsupported imageType values so its structured validation can
+        # reject them; never turn an unknown backend into the bootc default.
+        if image_filesystem:
+            if image_filesystem not in ("xfs", "ext4", "btrfs", "zfs"):
+                raise ValueError(f"Unsupported image filesystem: {image_filesystem!r}")
             filesystem = image_filesystem
-            if filesystem == "btrfs":
-                btrfs_subvolumes = disk_info.get("btrfsSubvolumes", False) if isinstance(disk_info, dict) else False
+        # Overriding a btrfs disk selection with ext4 must clear its stale flag.
+        btrfs_subvolumes = (filesystem == "btrfs" and isinstance(disk_info, dict)
+                           and bool(disk_info.get("btrfsSubvolumes", False)))
 
         # --- User account ---
         user_info = merged.get("user", {})

@@ -3,10 +3,7 @@ from gettext import gettext as _
 
 from gi.repository import Adw, Gtk
 
-
-_LOG_PATH = os.path.join(
-    os.environ.get("HOME", "/tmp"), ".cache", "bootc-installer", "fisherman-output.log"
-)
+from bootc_installer.utils.fisherman_runner import LOG_PATH as _LOG_PATH
 
 
 @Gtk.Template(resource_path="/org/bootcinstaller/Installer/gtk/dialog-output.ui")

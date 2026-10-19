@@ -166,11 +166,13 @@ class Branding:
     # Where `name` came from: "env", "file", "os-release" or "default".
     # Diagnostics only; not part of the cross-language contract.
     source: str = "default"
+    # Per-key provenance for the GNOME legacy recipe adapter.
+    logo_source: str = "default"
 
     def as_dict(self) -> dict:
         """The scalar identity keys only (what fixtures/expected.json `expect` lists)."""
         d = asdict(self)
-        for k in ("source", "store_url", "copy", "assets", "confirm_quotes", "extensions"):
+        for k in ("source", "logo_source", "store_url", "copy", "assets", "confirm_quotes", "extensions"):
             d.pop(k)
         return d
 
@@ -254,7 +256,7 @@ def from_sources(file_data, os_release_text, name_override="") -> Branding:
     home_url, _ = pick("home_url", "HOME_URL")
     docs_url, _ = pick("docs_url", "DOCUMENTATION_URL")
     support_url, _ = pick("support_url", "SUPPORT_URL")
-    logo, _ = pick("logo", "LOGO")
+    logo, logo_source = pick("logo", "LOGO")
     default_hostname, _ = pick("default_hostname", "DEFAULT_HOSTNAME", "ID", default=NEUTRAL_ID)
     default_image, _ = pick("default_image")
     store_url, _ = pick("store_url")
@@ -292,7 +294,7 @@ def from_sources(file_data, os_release_text, name_override="") -> Branding:
         name=name, id=id_, vendor=vendor, home_url=home_url, docs_url=docs_url,
         support_url=support_url, logo=logo, default_hostname=default_hostname,
         default_image=default_image, store_url=store_url, copy=copy, assets=assets,
-        confirm_quotes=quotes, extensions=extensions, source=source,
+        confirm_quotes=quotes, extensions=extensions, source=source, logo_source=logo_source,
     )
 
 

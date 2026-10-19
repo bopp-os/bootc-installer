@@ -172,6 +172,11 @@ def _find_icon_for_imgref(imgref: str) -> "str | None":
 
 # ── Pretty name helpers ───────────────────────────────────────────────────────
 
+def _catalog_pretty_name(name, imgref):
+    """Keep the selected catalog's identity; derive a name only as fallback."""
+    return name.strip() if isinstance(name, str) and name.strip() else _imgref_to_pretty_name(imgref)
+
+
 def _imgref_to_pretty_name(imgref: str) -> str:
     """Derive a human-readable name from an OCI image reference.
 
@@ -258,12 +263,8 @@ def _make_icon(icon_spec: str, size: int = 32) -> "Gtk.Image | None":
     img = Gtk.Image()
     img.set_pixel_size(size)
     try:
-        if icon_spec.startswith("resource://"):
-            img.set_from_resource(icon_spec[len("resource://"):])
-        elif icon_spec.startswith("/"):
-            img.set_from_file(icon_spec)
-        else:
-            img.set_from_icon_name(icon_spec)
+        from bootc_installer.utils.icons import set_image_icon
+        set_image_icon(img, icon_spec)
         return img
     except Exception as e:
         logger.warning(f"Could not load icon {icon_spec!r}: {e}")
@@ -343,10 +344,11 @@ class BootcDefaultImage(Adw.Bin):
                     continue
                 self.__add_leaf(
                     exp, img.get("name", imgref), imgref,
-                    img.get("description", ""), "", [exp])
+                    img.get("description", ""), "", [exp],
+                    pretty_name=_catalog_pretty_name(img.get("name"), imgref))
             self.list_images.append(exp)
 
-    def __build_node(self, parent, node, ancestors, search_ctx, flatpaks_ctx=None, icon_ctx=None, carousel_ctx=None, needs_user_ctx=False, composefs_ctx=False, image_type_ctx="bootc", bootloader_ctx="", image_filesystem_ctx="", flatpak_var_path_ctx="", registry_ctx="", default_hostname_ctx="", filesystems_ctx=None):
+    def __build_node(self, parent, node, ancestors, search_ctx, flatpaks_ctx=None, icon_ctx=None, carousel_ctx=None, needs_user_ctx=False, composefs_ctx=False, image_type_ctx="bootc", bootloader_ctx="", image_filesystem_ctx="", flatpak_var_path_ctx="", registry_ctx="", default_hostname_ctx="", filesystems_ctx=None, registry_name_ctx=""):
         """Recursively build ExpanderRow groups and ActionRow leaves."""
         # Inherit all per-image metadata from nearest ancestor that defines each field.
         node_flatpaks = node.get("flatpaks", flatpaks_ctx)
@@ -359,6 +361,9 @@ class BootcDefaultImage(Adw.Bin):
         node_image_filesystem = node.get("filesystem", image_filesystem_ctx)
         node_flatpak_var_path = node.get("flatpak_var_path", flatpak_var_path_ctx)
         node_registry = node.get("registry", registry_ctx)
+        # A tag leaf's label (e.g. Stable) is a channel, not the product.
+        # The nearest registry-owning node supplies that product's identity.
+        node_registry_name = node.get("name", "") if "registry" in node else registry_name_ctx
         node_default_hostname = node.get("default_hostname", default_hostname_ctx)
         node_filesystems = node.get("filesystems", filesystems_ctx if filesystems_ctx is not None else [])
 
@@ -380,7 +385,9 @@ class BootcDefaultImage(Adw.Bin):
                             node.get("desc", ""), search_ctx, ancestors,
                             node_flatpaks, node_icon, node_carousel, node_needs_user,
                             node_composefs, node_image_type, node_bootloader, node_image_filesystem,
-                            node_flatpak_var_path, node_default_hostname, node_filesystems)
+                            node_flatpak_var_path, node_default_hostname, node_filesystems,
+                            pretty_name=_catalog_pretty_name(
+                                node_registry_name if node.get("imgref") is None else node.get("name"), imgref))
             return
 
         exp = Adw.ExpanderRow(title=node["name"])
@@ -402,7 +409,7 @@ class BootcDefaultImage(Adw.Bin):
         child_ancestors = ancestors + [exp]
 
         for child in node.get("children", []):
-            self.__build_node(exp, child, child_ancestors, child_ctx, node_flatpaks, node_icon, node_carousel, node_needs_user, node_composefs, node_image_type, node_bootloader, node_image_filesystem, node_flatpak_var_path, node_registry, node_default_hostname, node_filesystems)
+            self.__build_node(exp, child, child_ancestors, child_ctx, node_flatpaks, node_icon, node_carousel, node_needs_user, node_composefs, node_image_type, node_bootloader, node_image_filesystem, node_flatpak_var_path, node_registry, node_default_hostname, node_filesystems, node_registry_name)
 
         if parent is self.list_images:
             parent.append(exp)
@@ -412,7 +419,7 @@ class BootcDefaultImage(Adw.Bin):
     def __add_leaf(self, parent, name, imgref, desc, search_ctx, ancestors,
                    flatpaks=None, icon=None, carousel=None, needs_user=False,
                    composefs=False, image_type="bootc", bootloader="", image_filesystem="",
-                   flatpak_var_path="", default_hostname="", filesystems=None):
+                   flatpak_var_path="", default_hostname="", filesystems=None, pretty_name=None):
         search_str = f"{search_ctx} {name} {desc} {imgref}".lower()
 
         row = Adw.ActionRow(title=name, subtitle=imgref)
@@ -424,7 +431,7 @@ class BootcDefaultImage(Adw.Bin):
         check.set_group(self.__radio_anchor)
         row.add_prefix(check)
         row.set_activatable_widget(check)
-        check.connect("toggled", self.__on_check_toggled, imgref, flatpaks, icon, carousel, needs_user, composefs, image_type, bootloader, image_filesystem, flatpak_var_path, default_hostname, filesystems or [])
+        check.connect("toggled", self.__on_check_toggled, imgref, flatpaks, icon, carousel, needs_user, composefs, image_type, bootloader, image_filesystem, flatpak_var_path, default_hostname, filesystems or [], _catalog_pretty_name(pretty_name if pretty_name is not None else name, imgref))
 
         # Leaf icon — only for nodes that explicitly define one (e.g. BootcOS variants).
         if icon:
@@ -432,7 +439,10 @@ class BootcDefaultImage(Adw.Bin):
             if img:
                 row.add_suffix(img)
 
-        parent.add_row(row)
+        if parent is self.list_images:
+            parent.append(row)
+        else:
+            parent.add_row(row)
         self.__leaf_rows.append((row, check, imgref, flatpaks, icon, carousel, needs_user, composefs, image_type, bootloader, image_filesystem, flatpak_var_path, default_hostname, filesystems or [], search_str, list(ancestors)))
 
     def __select_default(self):
@@ -446,7 +456,7 @@ class BootcDefaultImage(Adw.Bin):
 
     # ── Selection handlers ────────────────────────────────────────────────────
 
-    def __on_check_toggled(self, check, imgref, flatpaks, icon, carousel, needs_user, composefs, image_type, bootloader, image_filesystem, flatpak_var_path, default_hostname, filesystems):
+    def __on_check_toggled(self, check, imgref, flatpaks, icon, carousel, needs_user, composefs, image_type, bootloader, image_filesystem, flatpak_var_path, default_hostname, filesystems, pretty_name=None):
         if check.get_active():
             self.__selected_imgref = imgref
             self.__selected_icon = icon
@@ -457,7 +467,7 @@ class BootcDefaultImage(Adw.Bin):
             self.__selected_bootloader = bootloader
             self.__selected_image_filesystem = image_filesystem
             self.__selected_flatpak_var_path = flatpak_var_path or ""
-            self.__selected_pretty_name = _imgref_to_pretty_name(imgref)
+            self.__selected_pretty_name = _catalog_pretty_name(pretty_name, imgref)
             self.__selected_default_hostname = default_hostname or ""
             self.__selected_filesystems = filesystems or []
             # flatpaks may be a list of app IDs or a URL string pointing to a remote list.
