@@ -106,7 +106,17 @@ with tempfile.TemporaryDirectory() as directory:
         assert welcome_page.page_header._icon.get_paintable() is not None
         from bootc_installer.defaults.image import BootcDefaultImage
         image_page = next(page for page in pages if isinstance(page, BootcDefaultImage))
-        assert image_page.get_finals()['selected_image'] == 'localhost/qualification/example:latest'
+        selected = image_page.get_finals()
+        assert selected['selected_image'] == 'localhost/qualification/example:latest'
+        assert selected['pretty_name'] == identity.name
+        # Follow the real window's finals-to-Done identity path, rather than
+        # constructing a completion widget with no selected image metadata.
+        from bootc_installer.windows.main_window import _extract_icon_and_name
+        window.pretty_name, window.selected_icon = _extract_icon_and_name([selected])
+        completed = BootcDone(window)
+        completed.set_result(True, None)
+        assert completed.page_header.title == identity.name + ' is installed'
+        assert completed.page_header._icon.get_paintable() is not None
         window.close()
-print(json.dumps({'packaged_window': 'pass', 'catalog_root_leaf': True,
+print(json.dumps({'packaged_window': 'pass', 'catalog_root_leaf': True, 'selected_done_name': identity.name,
                   'installation_executed': False}))

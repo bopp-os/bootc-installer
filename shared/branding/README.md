@@ -226,3 +226,13 @@ products should ship the canonical branding file and a portable absolute
 file or theme-name logo. GTK resource URIs name application-bundled assets,
 not portable live-image files. `docs/PARITY.md` records the rendering coverage
 of the remaining optional artwork slots.
+
+### Selected catalog display names (GNOME)
+
+Completion uses the selected image's catalog identity, not the installer's
+host identity or a source-family slug. A direct `imgref` leaf uses its nonempty
+`name`; a `tag` leaf uses the nearest `registry`-owning node's name, so channel
+labels such as “Stable” do not become product names. Recipe-defined extra images
+also retain their names. Missing/blank names and manually entered custom image
+references use the existing reference-derived fallback. Selecting a different
+catalog OS therefore displays that OS's name; image references remain unchanged.
