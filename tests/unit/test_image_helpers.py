@@ -831,3 +831,13 @@ class TestImagesCatalogIntegrity(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 
+
+
+class TestCatalogPrettyName(unittest.TestCase):
+    def test_catalog_name_precedes_source_family_slug(self):
+        self.assertEqual(image_mod._catalog_pretty_name("  Example Remix  ", "localhost/base:latest"), "Example Remix")
+
+    def test_absent_empty_and_invalid_names_fall_back(self):
+        for name in (None, "", "   ", 42):
+            with self.subTest(name=name):
+                self.assertEqual(image_mod._catalog_pretty_name(name, "localhost/base:latest"), "Base")
