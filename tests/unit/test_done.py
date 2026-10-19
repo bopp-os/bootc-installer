@@ -372,3 +372,11 @@ class TestConfiguredLogo(unittest.TestCase):
         BootcDone.set_result(obj, True, None)
         self.assertEqual(obj.page_header.title, 'Selected OS is installed')
         self.assertEqual(obj.page_header.icon_name, 'selected-logo')
+
+    def test_neutral_fallback_keeps_success_checkmark(self):
+        obj = MagicMock()
+        obj._BootcDone__window = types.SimpleNamespace(
+            recipe={'distro_logo': 'org.bootcinstaller.Installer'},
+            pretty_name=None, selected_icon=None)
+        BootcDone.set_result(obj, True, None)
+        self.assertEqual(obj.page_header.icon_name, 'object-select-symbolic')

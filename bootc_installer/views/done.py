@@ -158,8 +158,10 @@ class BootcDone(Adw.Bin):
                 subtitle = (_("Installed in %s. ") % time_str) + subtitle
             self.page_header.subtitle = subtitle
             self.btn_reboot.set_label(copy_text.text(self.__window, "done_restart") or _("Restart now"))
-            icon_spec = (getattr(self.__window, "selected_icon", None)
-                         or self.__window.recipe.get("distro_logo"))
+            configured_logo = self.__window.recipe.get("distro_logo")
+            if configured_logo == "org.bootcinstaller.Installer":
+                configured_logo = None  # keep the neutral success checkmark
+            icon_spec = getattr(self.__window, "selected_icon", None) or configured_logo
             if icon_spec:
                 apply_icon(self.page_header, icon_spec)
             self.btn_reboot.set_visible(True)

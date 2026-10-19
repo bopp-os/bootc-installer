@@ -36,3 +36,11 @@ def test_live_completion_uses_configured_logo_and_name():
     assert done.page_header.title == 'Example OS is installed'
     done.set_result(False, None)
     assert done.page_header.icon_name == 'dialog-error-symbolic'
+
+
+def test_neutral_welcome_keeps_catalog_default():
+    controller = SimpleNamespace(recipe={})
+    info = {'logo': 'org.bootcinstaller.Installer', 'default_image_icon': 'catalog-logo'}
+    with patch('bootc_installer.defaults.welcome._needs_bluetooth_pairing', return_value=False):
+        welcome = BootcDefaultWelcome(controller, info, 'welcome', {})
+    assert welcome.page_header.icon_name == 'catalog-logo'
