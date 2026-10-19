@@ -221,6 +221,8 @@ selected catalog image's name/icon, falling back to the configured product
 identity when live media skips image selection. Unconfigured success and
 failure still use their existing status icons.
 
-This rendering support is GNOME-specific. Other frontends resolve identity
-from the shared branding contract but their artwork wiring is tracked in
-`docs/PARITY.md`; do not assume a resolved logo is rendered everywhere.
+The legacy recipe adaptation above is GNOME-specific. Cross-frontend
+products should ship the canonical branding file and a portable absolute
+file or theme-name logo. GTK resource URIs name application-bundled assets,
+not portable live-image files. `docs/PARITY.md` records the rendering coverage
+of the remaining optional artwork slots.
