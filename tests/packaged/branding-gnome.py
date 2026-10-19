@@ -50,3 +50,21 @@ assert done.page_header.icon_name == 'dialog-error-symbolic'
 print(json.dumps({'result': 'pass', 'sandbox': True, 'module': branding.__file__,
                   'name': identity.name, 'resolved_logo': path,
                   'decoded_widgets': ['welcome', 'done', 'catalog'], 'size': [120, 60]}))
+
+# Recipe generation only: no backend process, disk access or installation.
+from bootc_installer.utils.processor import Processor
+
+storage = Processor.gen_install_recipe('unused', [{
+    'disk': {'auto': {'disk': '/dev/vdb'}, 'filesystem': 'ext4'},
+    'hostname': 'canary',
+}], {'imgref': 'localhost/qualification/example:latest',
+     'local_imgref': 'oci:/var/tmp/qualification/source',
+     'composeFsBackend': True, 'bootloader': 'systemd', 'filesystem': 'ext4'})
+assert storage['filesystem'] == 'ext4'
+assert storage['composeFsBackend'] is True
+assert storage['bootloader'] == 'systemd'
+assert storage['image'] == 'oci:/var/tmp/qualification/source'
+assert storage['targetImgref'] == 'localhost/qualification/example:latest'
+print(json.dumps({'storage_contract': 'pass', 'filesystem': storage['filesystem'],
+                  'composeFsBackend': storage['composeFsBackend'],
+                  'source_target_separate': True, 'installation_executed': False}))
