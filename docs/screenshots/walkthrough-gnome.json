@@ -98,10 +98,10 @@
       "name": "qr_companion",
       "png": "docs/screenshots/02-qr_companion.png",
       "rendered": true,
-      "colours": 515,
-      "flat": 0.9278115501519757,
-      "ink": 0.037513997760358346,
-      "stddev": 0.12190035009389898,
+      "colours": 512,
+      "flat": 0.9278048845518051,
+      "ink": 0.037487335359675786,
+      "stddev": 0.12186988155746932,
       "text_excerpt": "Phone Companion Setup Scan the QR code below with your phone to configure the installer settings.\nBoth devices must be on the same local network. Phone Companion Setup Scan the QR code below with your phone to configure the installer settin"
     },
     {
@@ -138,10 +138,10 @@
       "name": "confirm",
       "png": "docs/screenshots/06-confirm.png",
       "rendered": true,
-      "colours": 231,
+      "colours": 233,
       "flat": 0.9202527595584706,
-      "ink": 0.006105689756305658,
-      "stddev": 0.04880679059805377,
+      "ink": 0.006065696155281822,
+      "stddev": 0.04873441209582334,
       "text_excerpt": "Confirm installation Hostname Hostname Hostname Encryption TPM + passphrase Encryption TPM + passphrase Install Install"
     },
     {
@@ -176,12 +176,12 @@
     }
   ],
   "transition_pixels": [
-    77223,
-    93247,
+    77210,
+    93234,
     54130,
     34271,
-    35801,
-    30933,
+    35769,
+    30905,
     43981,
     41947
   ],
