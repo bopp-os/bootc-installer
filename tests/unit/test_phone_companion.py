@@ -1,7 +1,7 @@
 import io
 import json
 import subprocess
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -26,11 +26,13 @@ def reset_phone_companion_state():
     CONFIG_RECEIVED_EVENT.clear()
 
 
-def _make_handler(path, body=b"", token="test-token"):
+def _make_handler(path, body=b"", token="test-token", auth=None):
     handler = CompanionRequestHandler.__new__(CompanionRequestHandler)
     handler.path = path
     handler.server = MagicMock(auth_token=token)
     handler.headers = {"Content-Length": str(len(body))}
+    if auth is not None:
+        handler.headers["Authorization"] = auth
     handler.rfile = io.BytesIO(body)
     handler.wfile = io.BytesIO()
     handler.send_response = MagicMock()
@@ -190,7 +192,11 @@ def test_handler_get_root_serves_html():
     handler.do_GET()
 
     handler.send_response.assert_called_once_with(200)
-    handler.send_header.assert_called_once_with("Content-Type", "text/html")
+    assert handler.send_header.call_args_list == [
+        call("Content-Type", "text/html"),
+        call("Cache-Control", "no-store"),
+        call("Referrer-Policy", "no-referrer"),
+    ]
     handler.end_headers.assert_called_once_with()
     body = handler.wfile.getvalue().decode("utf-8")
     assert body == render_companion_html()
@@ -232,7 +238,7 @@ def test_handler_post_valid_config_updates_global_state_and_event():
         "hostname": "bluefin",
         "sshkey": "ssh-ed25519 AAA",
     }
-    handler = _make_handler("/api/config?token=test-token", json.dumps(payload).encode("utf-8"))
+    handler = _make_handler("/api/config", json.dumps(payload).encode("utf-8"), auth="Bearer test-token")
 
     handler.do_POST()
 
@@ -244,7 +250,7 @@ def test_handler_post_valid_config_updates_global_state_and_event():
 
 
 def test_handler_post_invalid_json_returns_error_without_setting_state():
-    handler = _make_handler("/api/config?token=test-token", b"{not-json")
+    handler = _make_handler("/api/config", b"{not-json", auth="Bearer test-token")
 
     with patch("bootc_installer.utils.phone_companion.logger.error") as error_mock:
         handler.do_POST()
@@ -257,7 +263,7 @@ def test_handler_post_invalid_json_returns_error_without_setting_state():
 
 
 def test_handler_post_unknown_path_returns_404():
-    handler = _make_handler("/api/other?token=test-token", b"{}")
+    handler = _make_handler("/api/other", b"{}", auth="Bearer test-token")
 
     handler.do_POST()
 
@@ -266,7 +272,7 @@ def test_handler_post_unknown_path_returns_404():
 
 @pytest.mark.parametrize("method", ["do_GET", "do_POST"])
 def test_handler_rejects_missing_or_invalid_token(method):
-    handler = _make_handler("/api/config?token=wrong", b"{}")
+    handler = _make_handler("/api/config?token=wrong", b"{}", auth="Bearer wrong")
 
     getattr(handler, method)()
 
@@ -276,7 +282,7 @@ def test_handler_rejects_missing_or_invalid_token(method):
 
 
 def test_handler_rejects_oversized_config():
-    handler = _make_handler("/api/config?token=test-token", b"x" * (64 * 1024 + 1))
+    handler = _make_handler("/api/config", b"x" * (64 * 1024 + 1), auth="Bearer test-token")
 
     handler.do_POST()
 
@@ -296,7 +302,7 @@ _GOOD = {
 
 
 def _post(payload):
-    handler = _make_handler("/api/config?token=test-token", json.dumps(payload).encode("utf-8"))
+    handler = _make_handler("/api/config", json.dumps(payload).encode("utf-8"), auth="Bearer test-token")
     with patch("bootc_installer.utils.phone_companion.logger.error"):
         handler.do_POST()
     return handler
@@ -344,3 +350,64 @@ def test_only_the_first_submission_is_accepted():
 
     second.send_error.assert_called_once_with(409, "Configuration already received")
     assert phone_companion.GLOBAL_CONFIG["username"] == "johndoe"
+
+
+# ── #227: where the session token travels ───────────────────────────────────
+
+def test_post_rejects_a_token_in_the_url():
+    """The submission must carry the token in a header: a token in the query
+    string is not accepted, so it is never repeated in a request line."""
+    handler = _make_handler("/api/config?token=test-token", json.dumps(_GOOD).encode("utf-8"))
+
+    handler.do_POST()
+
+    handler.send_error.assert_called_once_with(403, "Forbidden")
+    assert phone_companion.GLOBAL_CONFIG is None
+    assert not CONFIG_RECEIVED_EVENT.is_set()
+
+
+@pytest.mark.parametrize("auth", ["test-token", "Basic test-token", "Bearer", "Bearer wrong", ""])
+def test_post_rejects_a_malformed_or_wrong_authorization_header(auth):
+    handler = _make_handler("/api/config", json.dumps(_GOOD).encode("utf-8"), auth=auth)
+
+    handler.do_POST()
+
+    handler.send_error.assert_called_once_with(403, "Forbidden")
+    assert phone_companion.GLOBAL_CONFIG is None
+
+
+def test_bearer_scheme_is_case_insensitive():
+    handler = _make_handler("/api/config", json.dumps(_GOOD).encode("utf-8"), auth="bearer test-token")
+
+    handler.do_POST()
+
+    handler.send_response.assert_called_once_with(200)
+
+
+def test_token_is_single_use_after_an_accepted_submission():
+    """Once the details are in, the QR code or a copy of its link opens
+    nothing: the server forgets the token."""
+    first = _make_handler("/api/config", json.dumps(_GOOD).encode("utf-8"), auth="Bearer test-token")
+    first.do_POST()
+    first.send_response.assert_called_once_with(200)
+    assert first.server.auth_token is None
+
+    again = _make_handler("/?token=test-token")
+    again.server = first.server
+    again.do_GET()
+    again.send_error.assert_called_once_with(403, "Forbidden")
+
+
+def test_rejected_submission_keeps_the_token():
+    """A typo on the phone must not lock the user out of retrying."""
+    handler = _make_handler("/api/config", b"{not-json", auth="Bearer test-token")
+    with patch("bootc_installer.utils.phone_companion.logger.error"):
+        handler.do_POST()
+
+    assert handler.server.auth_token == "test-token"
+
+
+def test_page_sends_the_token_in_a_header_and_drops_it_from_the_url():
+    assert "'Authorization': 'Bearer ' + companionToken" in COMPANION_HTML
+    assert "window.history.replaceState(null, '', window.location.pathname)" in COMPANION_HTML
+    assert "/api/config?token=" not in COMPANION_HTML

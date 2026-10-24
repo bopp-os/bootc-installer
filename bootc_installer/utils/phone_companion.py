@@ -265,6 +265,16 @@ COMPANION_HTML = """<!DOCTYPE html>
     </div>
 
     <script>
+        // The QR code carries the session token in ?token= so the page itself
+        // can be fetched. Keep it in memory only and drop it from the address
+        // bar and this history entry, so it does not linger in the phone's
+        // browser history; the submission sends it in a header, not a URL
+        // (#227). Scan the QR code again to reopen the form.
+        const companionToken = new URLSearchParams(window.location.search).get('token') || '';
+        if (window.history && window.history.replaceState) {
+            window.history.replaceState(null, '', window.location.pathname);
+        }
+
         // Auto-suggest username from full name
         document.getElementById('fullname').addEventListener('input', function(e) {
             const name = e.target.value.toLowerCase();
@@ -292,10 +302,12 @@ COMPANION_HTML = """<!DOCTYPE html>
                 sshkey: sshkey
             };
 
-            const token = new URLSearchParams(window.location.search).get('token');
-            fetch('/api/config?token=' + encodeURIComponent(token || ''), {
+            fetch('/api/config', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + companionToken
+                },
                 body: JSON.stringify(payload)
             })
             .then(res => res.json())
@@ -322,11 +334,28 @@ class CompanionRequestHandler(http.server.SimpleHTTPRequestHandler):
         # Suppress noisy HTTP logging in the installer logs
         pass
 
-    def _authorized_path(self):
+    def _token_matches(self, supplied):
+        expected = getattr(self.server, "auth_token", None)
+        if not expected or not isinstance(supplied, str):
+            return False
+        return secrets.compare_digest(supplied.encode("utf-8"), expected.encode("utf-8"))
+
+    def _authorized_path(self, from_header=False):
+        """The request path if the session token is valid, else None (403).
+
+        The page is opened from the QR code, so a GET carries the token in
+        ?token=. The submission must send it as `Authorization: Bearer`, never
+        in the URL, so the token is not repeated in request lines (#227).
+        """
         parsed = urlparse(self.path)
-        supplied = parse_qs(parsed.query).get("token", [""])[0]
-        expected = getattr(self.server, "auth_token", "")
-        if not expected or not secrets.compare_digest(supplied, expected):
+        if from_header:
+            header = self.headers.get("Authorization") or ""
+            scheme, _, supplied = header.partition(" ")
+            if scheme.lower() != "bearer":
+                supplied = ""
+        else:
+            supplied = parse_qs(parsed.query).get("token", [""])[0]
+        if not self._token_matches(supplied.strip()):
             self.send_error(403, "Forbidden")
             return None
         return parsed.path
@@ -338,13 +367,17 @@ class CompanionRequestHandler(http.server.SimpleHTTPRequestHandler):
         if path in ["/", "/index.html"]:
             self.send_response(200)
             self.send_header("Content-Type", "text/html")
+            # The page was fetched with the token in its URL: never cache it,
+            # and never send that URL on as a Referer.
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Referrer-Policy", "no-referrer")
             self.end_headers()
             self.wfile.write(render_companion_html().encode('utf-8'))
         else:
             self.send_error(404, "Not Found")
 
     def do_POST(self):
-        path = self._authorized_path()
+        path = self._authorized_path(from_header=True)
         if path is None:
             return
         if path == "/api/config":
@@ -367,6 +400,9 @@ class CompanionRequestHandler(http.server.SimpleHTTPRequestHandler):
                 global GLOBAL_CONFIG
                 GLOBAL_CONFIG = config
                 CONFIG_RECEIVED_EVENT.set()
+                # The token is single-use: once the details are in, a copy of
+                # the QR code or the link opens nothing (#227).
+                self.server.auth_token = None
                 
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
