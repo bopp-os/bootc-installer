@@ -2,8 +2,8 @@
   "flavor": "xfce",
   "frames": 9,
   "rendered_frames": 9,
-  "advanced_transitions": 8,
-  "visual_states": 9,
+  "advanced_transitions": 5,
+  "visual_states": 6,
   "activation_key": null,
   "ocr": false,
   "screens": {
@@ -91,25 +91,25 @@
       "rendered": true,
       "colours": 225,
       "ink": 0.0117628101836932,
-      "stddev": 0.07352482178610632,
+      "stddev": 0.07353271839942598,
       "text_excerpt": "Welcome to TunaOS This assistant installs TunaOS on this computer.\n\nYou'll choose what to install and where; nothing is written to any disk until you confirm on the final step."
     },
     {
       "name": "source",
       "png": "docs/screenshots/02-source.png",
       "rendered": true,
-      "colours": 266,
-      "ink": 0.010097754860887313,
-      "stddev": 0.0651528558236435,
+      "colours": 251,
+      "ink": 0.00985605328177033,
+      "stddev": 0.06484792197673317,
       "text_excerpt": "What do you want to install? Bluefin Bluefin ghcr.io/ublue-os/bluefin:latest GNOME GNOME ghcr.io/tuna-os/bonito:latest KDE Plasma KDE Plasma ghcr.io/tuna-os/bonito:kde"
     },
     {
       "name": "destination",
       "png": "docs/screenshots/03-destination.png",
       "rendered": true,
-      "colours": 334,
-      "ink": 0.020786335804060585,
-      "stddev": 0.09432785538645765,
+      "colours": 251,
+      "ink": 0.00985605328177033,
+      "stddev": 0.06484792197673317,
       "text_excerpt": "Where should TunaOS be installed? Samsung SSD 870 EVO 500GB    /dev/sda    465.8 GiB    SATA Samsung SSD 870 EVO 500GB    /dev/sda    465.8 GiB    SATA Extreme SSD    /dev/sdc    931.5 GiB    USB Extreme SSD    /dev/sdc    931.5 GiB    USB "
     },
     {
@@ -134,9 +134,9 @@
       "name": "confirm",
       "png": "docs/screenshots/06-confirm.png",
       "rendered": true,
-      "colours": 267,
-      "ink": 0.014126114512837039,
-      "stddev": 0.07486863948968678,
+      "colours": 218,
+      "ink": 0.006740788484262542,
+      "stddev": 0.056570325265813744,
       "text_excerpt": "Confirm installation Image:       ghcr.io/ublue-os/bluefin:latest\nDisk:        /dev/sda\nFilesystem:  xfs\nEncryption:  No encryption\nHostname:    tunaos Everything on the selected disk will be erased. This cannot be undone."
     },
     {
@@ -152,9 +152,9 @@
       "name": "done",
       "png": "docs/screenshots/08-done.png",
       "rendered": true,
-      "colours": 221,
-      "ink": 0.006418519712106564,
-      "stddev": 0.055636473884995645,
+      "colours": 266,
+      "ink": 0.016059727145772907,
+      "stddev": 0.09617084799975062,
       "text_excerpt": "TunaOS is installed Remove the installation media and restart the computer. Restart now Restart now"
     },
     {
@@ -163,19 +163,19 @@
       "rendered": true,
       "colours": 340,
       "ink": 0.02365989902245139,
-      "stddev": 0.09747570276616897,
+      "stddev": 0.09756963643239566,
       "text_excerpt": "TunaOS is installed Remove the installation media and restart the computer. Save your recovery key If your disk fails to unlock automatically, you will need this recovery key to access your data. Save it somewhere safe, like a password mana"
     }
   ],
   "transition_pixels": [
-    9829,
-    12349,
-    15534,
+    9798,
+    0,
+    11404,
     12045,
-    12003,
-    16010,
-    12703,
-    12800
+    0,
+    15634,
+    0,
+    57254
   ],
   "spec_drift": [],
   "notes": "GPU-less capture: pages are driven programmatically and text is read from the widget tree, so this reports SCREEN PARITY only. It does not measure keyboard navigation, compositor rendering, or that the frontend launches under its real desktop \u2014 those stay the VM walkthrough's job."
