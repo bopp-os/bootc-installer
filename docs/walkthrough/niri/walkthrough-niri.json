@@ -105,27 +105,27 @@
       "colours": 483,
       "flat": 0.6203333333333333,
       "ink": 0.10976666666666667,
-      "stddev": 0.10512279312416577,
+      "stddev": 0.10513134332625781,
       "text_excerpt": "Step 2 of 6 \u00b7 Disk Destination Everything on /dev/sda will be erased. This cannot be undone. Samsung SSD 870 EVO 500GB /dev/sda  \u00b7  465.8 GiB  \u00b7  SATA Extreme SSD /dev/sdc  \u00b7  931.5 GiB  \u00b7  USB Cruzer Blade /dev/sdd  \u00b7  59.6 GiB  \u00b7  USB WD_"
     },
     {
       "name": "03-encryption",
       "png": "docs/screenshots/03-encryption.png",
       "rendered": true,
-      "colours": 453,
-      "flat": 0.6161333333333333,
-      "ink": 0.11356666666666666,
-      "stddev": 0.11049312796175044,
+      "colours": 450,
+      "flat": 0.6162,
+      "ink": 0.11353333333333333,
+      "stddev": 0.11051476375489575,
       "text_excerpt": "Step 3 of 6 \u00b7 Encryption Disk encryption Encryption protects your files if the disk is lost or stolen. It cannot be turned on later without reinstalling. No encryption Anyone with the disk can read your files. Passphrase You'll type it at e"
     },
     {
       "name": "04-confirm",
       "png": "docs/screenshots/04-confirm.png",
       "rendered": true,
-      "colours": 387,
-      "flat": 0.6189,
-      "ink": 0.025966666666666666,
-      "stddev": 0.09446369542778033,
+      "colours": 384,
+      "flat": 0.6189666666666667,
+      "ink": 0.025933333333333333,
+      "stddev": 0.09449853069713464,
       "text_excerpt": "Step 4 of 6 \u00b7 Confirm Confirm installation \u26a0  Everything on /dev/sda will be erased. This cannot be undone. Summary Target disk /dev/sda Filesystem xfs Encryption No encryption Hostname tunaos Image ghcr.io/tuna-os/albacore:gnome Back Back "
     },
     {
@@ -161,9 +161,9 @@
   ],
   "transition_pixels": [
     75816,
-    14583,
-    188989,
-    212515,
+    14589,
+    188977,
+    212497,
     308479,
     53687
   ],
