@@ -104,7 +104,8 @@ def body(pinned, head, commits, ci_reason, token_kind, total=None):
     lines = [
         f"Moves the `fisherman` submodule from [`{pinned[:7]}`]({url}/commit/{pinned}) "
         f"to [`{head[:7]}`]({url}/commit/{head}), the current HEAD of "
-        f"`{UPSTREAM}@{BRANCH}`.",
+        f"`{UPSTREAM}@{BRANCH}`. The fisherman source pin in each frontend "
+        "Flatpak manifest (`frontends/*/flatpak/`) moves to the same commit.",
         "",
         f"CI on `{head[:7]}`: {ci_reason}. "
         f"Full diff: {url}/compare/{pinned[:12]}...{head[:12]}",

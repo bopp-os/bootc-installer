@@ -7,7 +7,9 @@ name: Fisherman bump
 # green, opens or updates ONE pull request against `dev` from the fixed branch
 # bot/fisherman-bump. The decision is shared/ci/fisherman_bump.py
 # (tests/unit/test_ci_fisherman_bump.py); this file only turns it into git
-# and PR operations.
+# and PR operations. The bump moves every fisherman pin together, the
+# submodule gitlink and each frontend Flatpak manifest's fisherman source,
+# through shared/ci/fisherman_pins.py (tests/unit/test_ci_fisherman_pins.py).
 #
 # What it refuses to do:
 #   - bump to a commit whose CI is red, still running, or absent: every
@@ -96,7 +98,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           base=$(git rev-parse HEAD)
-          git update-index --cacheinfo "160000,$NEW,fisherman"
+          # Moves the gitlink AND each frontend Flatpak manifest's fisherman
+          # source (found by URL) to $NEW and stages them, so the bump passes
+          # TestFishermanPin. Exits non-zero, writing nothing, if a manifest's
+          # fisherman source is missing or duplicated.
+          python3 shared/ci/fisherman_pins.py --commit "$NEW"
           git commit -q -m "$TITLE" -m "fisherman dev HEAD, CI green. Opened by fisherman-bump.yml."
           # The branch already holds this exact bump on this exact dev: leave
           # it alone, so CI is not re-run for nothing.
