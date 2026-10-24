@@ -1,7 +1,8 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
+    "config:recommended",
+    "helpers:pinGitHubActionDigests"
   ],
   "automerge": false,
   "packageRules": [
@@ -29,6 +30,16 @@
       ],
       "automerge": false,
       "enabled": false
+    },
+    {
+      "description": "tuna-os/* reusable workflows and actions are first-party and intentionally track @main; do not pin them (docs/RELEASE.md, Action pinning).",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchPackageNames": [
+        "tuna-os/**"
+      ],
+      "pinDigests": false
     }
   ]
 }

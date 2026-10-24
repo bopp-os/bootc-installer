@@ -68,7 +68,7 @@ jobs:
       # step's `if:`, so the steps read this instead.
       TOKEN_KIND: ${{ secrets.FISHERMAN_BUMP_TOKEN != '' && 'bot' || 'default' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ env.BASE_BRANCH }}
           fetch-depth: 0

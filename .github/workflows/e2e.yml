@@ -43,10 +43,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: fisherman/fisherman/go.mod
           cache-dependency-path: fisherman/fisherman/go.sum
@@ -69,7 +69,7 @@ jobs:
         run: xvfb-run -a -s "-screen 0 1400x1000x24" python3 tests/e2e/run_gnome.py
       - name: judge the recipe the frontend handed to fisherman
         run: python3 shared/e2e/check-recipe.py gnome
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: e2e-recipe-gnome
@@ -84,10 +84,10 @@ jobs:
       run:
         working-directory: frontends/xfce
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: fisherman/fisherman/go.mod
           cache-dependency-path: fisherman/fisherman/go.sum
@@ -103,7 +103,7 @@ jobs:
         run: xvfb-run -a python3 tests/e2e/run.py
       - name: judge the recipe the frontend handed to fisherman
         run: python3 ../../shared/e2e/check-recipe.py xfce
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: e2e-recipe-xfce
@@ -118,14 +118,14 @@ jobs:
       run:
         working-directory: frontends/niri
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: fisherman/fisherman/go.mod
           cache-dependency-path: fisherman/fisherman/go.sum
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
       - name: install Qt runtime deps + PyQt6
@@ -142,7 +142,7 @@ jobs:
         run: python3 tests/e2e/run.py
       - name: judge the recipe the frontend handed to fisherman
         run: python3 ../../shared/e2e/check-recipe.py niri
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: e2e-recipe-niri
@@ -157,10 +157,10 @@ jobs:
       run:
         working-directory: frontends/cosmic
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: fisherman/fisherman/go.mod
           cache-dependency-path: fisherman/fisherman/go.sum
@@ -172,8 +172,8 @@ jobs:
             libfontconfig-dev libfreetype-dev \
             libinput-dev libudev-dev libgbm-dev libegl1-mesa-dev libssl-dev \
             python3-jsonschema
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: frontends/cosmic
       - name: prepare the backend, shim and loop disk
@@ -182,7 +182,7 @@ jobs:
         run: cargo test --release -- --ignored e2e_install_path_reaches_fisherman --nocapture
       - name: judge the recipe the frontend handed to fisherman
         run: python3 ../../shared/e2e/check-recipe.py cosmic
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: e2e-recipe-cosmic
@@ -206,7 +206,7 @@ jobs:
             cmake ninja-build gcc-c++ \
             qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtsvg \
             kf6-kirigami kf6-kirigami-addons kf6-qqc2-desktop-style kf6-breeze-icons
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
       - name: build installer + end-to-end driver
@@ -227,7 +227,7 @@ jobs:
           ./build/tuna-installer-e2e
       - name: judge the recipe the frontend handed to fisherman
         run: python3 ../../shared/e2e/check-recipe.py kde
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: e2e-recipe-kde
@@ -244,19 +244,19 @@ jobs:
       matrix:
         frontend: [gnome, kde, cosmic, niri, xfce]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
       # Multi-GB OCI image + a loop disk: same trick fisherman's own VM job uses.
       - name: free disk space
-        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
         with:
           tool-cache: true
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: fisherman/fisherman/go.mod
           cache-dependency-path: fisherman/fisherman/go.sum
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: e2e-recipe-${{ matrix.frontend }}
           path: recipes
@@ -273,7 +273,7 @@ jobs:
           RECIPE: recipes/e2e-recipe-${{ matrix.frontend }}.json
           FRONTEND: ${{ matrix.frontend }}
         run: bash shared/e2e/vm-install.sh "$RECIPE" "$FRONTEND"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: e2e-install-${{ matrix.frontend }}

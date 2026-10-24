@@ -133,6 +133,14 @@ All in `.github/workflows/promote.yml`:
 - The `workflow_run` list: workflows whose completion re-evaluates the gate.
   A new validation workflow belongs in both lists.
 
+## Action pinning
+
+Every third-party `uses:` in `.github/workflows/` is pinned to a full commit
+SHA (or image digest) with the version as a trailing comment, and Renovate
+(`helpers:pinGitHubActionDigests`) keeps the pins current. The org's own
+`tuna-os/*` reusable workflows and actions are first-party and intentionally
+stay on `@main`; Renovate is told not to pin them.
+
 ## Things the flow does not do
 
 - It does not run fisherman's full image matrix. `e2e.yml` installs and

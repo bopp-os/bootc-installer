@@ -87,13 +87,13 @@ jobs:
       image: ghcr.io/flathub-infra/flatpak-github-actions:${{ inputs.flatpak-builder-image }}
       options: --privileged
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: ${{ inputs.checkout-submodules && 'recursive' || 'false' }}
 
       # `arch` is required on the arm runner: the action's default is the
       # literal x86_64, not the runner's architecture (see flatpak.yml).
-      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@79327416609af08178ad73b352877e51450790b3 # v6.8
         with:
           arch: ${{ matrix.arch }}
           bundle: ${{ inputs.app-id }}-${{ matrix.arch }}.flatpak
@@ -113,7 +113,7 @@ jobs:
 
       # The frontend is in the artifact name: five frontends publish in one
       # release run, and the name is the only thing that tells them apart.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: oci-${{ inputs.frontend }}-${{ matrix.arch }}
           path: oci-${{ inputs.frontend }}-${{ matrix.arch }}/
@@ -126,7 +126,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: oci-${{ inputs.frontend }}-*
           path: .
