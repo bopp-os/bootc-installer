@@ -42,7 +42,7 @@ claimed a render that nobody had wired up.
 | `confirm_title` | page header | step heading | page title | heading | page title |
 | `confirm_subtitle` | header subtitle | italic label, hidden | page subtitle | label, hidden | label, hidden |
 | `confirm_body` | dim label, hidden | label, hidden | body, hidden | label, hidden | label, hidden |
-| `confirm_warning` | summary warning row (own group above the summary, `{disk}` filled) | inline message | warning card | warning line | warning row |
+| `confirm_warning` | summary warning row (own group above the summary, `{disk}` filled) | inline message | warning card | warning line | warning row naming the selected disk |
 | `confirm_button` | pill button | Next button | forward button | button | Next button |
 | `confirm_quotes` | random line per language | no | no | no | no |
 | `progress_title` | image-writing step label (centred title) | label | page title | heading | page title |
@@ -65,7 +65,7 @@ claimed a render that nobody had wired up.
 | `recovery_key_ack` | checkbox | checkbox | checkbox | checkbox | checkbox |
 | `done_title` | page header | heading | title2 | heading | headline |
 | `done_subtitle` | header subtitle (+ elapsed time) | label | body | label | label |
-| `done_restart` | Reboot Now button | Restart button | suggested button | button | Reboot button |
+| `done_restart` | Reboot Now button | Restart button | suggested button | button | suggested button beside Close |
 | `done_failed_title` | page header | heading | title2 | heading | headline |
 | `validate_*` | error line under the hostname (disk and confirm pages) and the username | inline message on the encryption step (passphrase) and the confirm step (hostname) | hostname row description; encryption row description | line under the hostname (confirm) and under the passphrase | line under the hostname, the username and the encryption choice |
 | `store_label` | done page link to `store_url` (+ QR from `assets.store_qr`, US locale) | done page link | done page link | done page link | done page link |

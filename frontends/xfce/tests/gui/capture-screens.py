@@ -254,17 +254,66 @@ def _seed_progress(page):
         sys.exit("FAIL: the progress bar is not visible")
 
 
-def _settle():
-    """Let GTK finish layout and drawing before the grab.
-
-    Grabbing too early is the dangerous failure: it yields a valid PNG of a
-    half-drawn or empty window, which looks like a screenshot and is not one.
-    """
+def _drain():
     for _ in range(200):
-        while Gtk.events_pending():
-            Gtk.main_iteration_do(False)
         if not Gtk.events_pending():
             break
+        Gtk.main_iteration_do(False)
+
+
+class _Painter:
+    """Counts the frames GTK actually paints into the window.
+
+    GTK3 lays out and paints from the frame clock, which schedules each frame
+    as a TIMED source paced to the refresh rate. Between "the page changed"
+    and "the page was painted" there can be a stretch where
+    Gtk.events_pending() is False -- nothing is due yet -- although the
+    paint is still to come. The old _settle() stopped at the first such
+    moment, so whenever a frame was still waiting on the clock the grab read
+    the X server's copy of the PREVIOUS page: CI committed 02-source and
+    03-destination, 05-identity and 06-confirm, 07-progress and 08-done as
+    identical PNGs while the widget-tree text (read from the stack, not the
+    pixels) credited every screen. Waiting for after-paint replaces the
+    guess with the event that means the frame is on screen.
+    """
+
+    def __init__(self, window):
+        self.count = 0
+        window.get_frame_clock().connect("after-paint", self._tick)
+
+    def _tick(self, *_):
+        self.count += 1
+
+
+def _settle(window, painter, frames=2, timeout_s=10):
+    """Return once `frames` whole frames have been painted after the caller's
+    changes, and the X server has them. False if that never happened.
+
+    Two frames, not one: a page whose first layout wraps a label or adds rows
+    queues another resize from inside the first frame. The wake-up timeout
+    keeps the blocking iteration from sleeping forever if GTK decides there
+    is nothing to draw.
+    """
+    _drain()
+    target = painter.count + frames
+    window.queue_draw()
+    wake = GLib.timeout_add(20, lambda: True)
+    deadline = GLib.get_monotonic_time() + timeout_s * 1_000_000
+    try:
+        while painter.count < target:
+            if GLib.get_monotonic_time() > deadline:
+                return False
+            Gtk.main_iteration_do(True)
+            if painter.count < target:
+                window.queue_draw()
+    finally:
+        GLib.source_remove(wake)
+    _drain()
+    # The paint went over the X connection; make sure the server has done it
+    # before reading its pixels back.
+    window.get_display().sync()
+    _drain()
+    return True
 
 
 def _grab(window):
@@ -374,11 +423,63 @@ def main():
     app = Gtk.Application(application_id="org.tunaos.installer.xfce.shots")
     frames, findings = [], []
 
+    captured = []
+
+    def capture(win, painter, name, filename, expect_back):
+        """Wait for the page to be painted, grab it, and check that the frame
+        is that page: a new picture, the right stack child, the right nav."""
+        painted = _settle(win, painter)
+        pixbuf = _grab(win)
+        if pixbuf is None:
+            print(f"  !! no window for {name}", file=sys.stderr)
+            return None
+        path = os.path.join(out, filename)
+        pixbuf.savev(path, "png", [], [])
+        frames.append(path)
+        finding = _audit(pixbuf, name)
+        finding["png"] = path
+        visible = win.stack.get_visible_child()
+        finding["text"] = " ".join(_page_text(visible)) if visible else ""
+        fatal = []
+        if not painted:
+            fatal.append("GTK never painted this page")
+        pixels = bytes(pixbuf.get_pixels())
+        if captured and captured[-1] == pixels:
+            # The defect this harness shipped: a grab that predates the paint
+            # is a perfect copy of the previous frame, and every per-frame
+            # check (ink, colours, widget text) still passes.
+            fatal.append("pixel-identical to the previous frame -- the grab "
+                         "did not wait for the paint")
+        captured.append(pixels)
+        page = PAGE_ORDER[win.index]
+        if win.stack.get_visible_child_name() != page:
+            fatal.append(f"stack shows {win.stack.get_visible_child_name()!r}")
+        back = win.back_btn.get_visible() and win.nav.get_visible()
+        if back != expect_back:
+            fatal.append("Back is " + ("shown" if back else "hidden") +
+                         " on this page")
+        if fatal:
+            finding["fatal"] = "; ".join(fatal)
+        findings.append(finding)
+        return finding
+
+    def add_fatal(finding, problems):
+        if problems:
+            finding["fatal"] = "; ".join(
+                ([finding["fatal"]] if finding.get("fatal") else []) + problems)
+
     def on_activate(_app):
+        # No theme animations. The theme fades a button between its
+        # insensitive and sensitive looks over ~200 ms, and a grab that waits
+        # for the paint (rather than for nothing to be pending) lands inside
+        # that fade: the confirm page's live Install button photographed
+        # greyed out, as if it were held.
+        Gtk.Settings.get_default().set_property("gtk-enable-animations", False)
         win = InstallerWindow(app)
         win.set_default_size(760, 560)
         win.show_all()
-        _settle()
+        _drain()
+        painter = _Painter(win)
         for index, name in enumerate(PAGE_ORDER):
             # Drive the stack directly rather than through _enter(): _enter
             # fires on_enter() side effects, and on the progress page that is
@@ -389,25 +490,36 @@ def main():
             if name == "progress":
                 _seed_progress(win.pages["progress"])
             elif name == "done":
+                # A finished install's bar is full; the seeded one stopped
+                # part-way through the pull.
+                win.trawl.set_fill(1.0)
                 win.pages["done"].set_result(True, "")
-            elif name != "confirm":
-                win.pages[name].on_enter()
             else:
                 win.pages[name].on_enter()
             win.refresh_nav()
-            _settle()
-            pixbuf = _grab(win)
-            if pixbuf is None:
-                print(f"  !! no window for {name}", file=sys.stderr)
+            finding = capture(win, painter, name, f"{index + 1:02d}-{name}.png",
+                              expect_back=name not in ("welcome", "progress", "done"))
+            if finding is None:
                 continue
-            path = os.path.join(out, f"{index + 1:02d}-{name}.png")
-            pixbuf.savev(path, "png", [], [])
-            frames.append(path)
-            finding = _audit(pixbuf, name)
-            finding["png"] = path
-            visible = win.stack.get_visible_child()
-            finding["text"] = " ".join(_page_text(visible)) if visible else ""
-            findings.append(finding)
+            problems = []
+            if name == "confirm":
+                text = finding["text"]
+                disk = win.pages["destination"].selected_disk()["path"]
+                for row in ("Target disk:", "Filesystem:", "Encryption:",
+                            "Hostname:", "Image:"):
+                    if row not in text:
+                        problems.append(f"summary has no {row!r} row")
+                if core.BRANDING.text("confirm_warning", disk=disk) not in text:
+                    problems.append("the erase warning does not name " + disk)
+            elif name == "done":
+                done = win.pages["done"]
+                if core.BRANDING.text("done_title") not in finding["text"]:
+                    problems.append("done_title is not on the done page")
+                if not (done.close_btn.get_visible() and done.reboot_btn.get_visible()):
+                    problems.append("the done page lacks Close or Restart now")
+                elif not done.reboot_btn.get_sensitive():
+                    problems.append("Restart now is held with no recovery key")
+            add_fatal(finding, problems)
 
         # The done page again, this time as a TPM install leaves it. The key
         # goes in through the progress page's parser, so this frame proves the
@@ -423,27 +535,18 @@ def main():
             win.stack.set_visible_child_name("done")
             win.pages["done"].set_result(True, "", key)
             win.refresh_nav()
-            _settle()
-            pixbuf = _grab(win)
-            if pixbuf is not None:
-                path = os.path.join(out, f"{len(PAGE_ORDER) + 1:02d}-recovery.png")
-                pixbuf.savev(path, "png", [], [])
-                frames.append(path)
-                finding = _audit(pixbuf, "recovery")
-                finding["png"] = path
-                visible = win.stack.get_visible_child()
-                text = " ".join(_page_text(visible)) if visible else ""
-                finding["text"] = text
+            finding = capture(win, painter, "recovery",
+                              f"{len(PAGE_ORDER) + 1:02d}-recovery.png",
+                              expect_back=False)
+            if finding is not None:
                 # The point of the frame: the key itself must be on screen,
                 # and reboot must still be held.
-                if key not in text:
-                    finding["fatal"] = (
-                        "the recovery key is not in the rendered text; the "
-                        "panel did not draw")
+                if key not in finding["text"]:
+                    add_fatal(finding, ["the recovery key is not in the rendered "
+                                        "text; the panel did not draw"])
                 elif win.pages["done"].reboot_btn.get_sensitive():
-                    finding["fatal"] = (
-                        "reboot is live before the key was acknowledged")
-                findings.append(finding)
+                    add_fatal(finding, ["reboot is live before the key was "
+                                        "acknowledged"])
 
         win.destroy()
         app.quit()

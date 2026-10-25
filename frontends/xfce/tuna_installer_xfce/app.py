@@ -79,6 +79,10 @@ class InstallerWindow(Gtk.ApplicationWindow):
         nav.pack_end(self.next_btn, False, False, 0)
         nav.pack_end(self.back_btn, False, False, 0)
         outer.pack_end(nav, False, False, 0)
+        # The wizard's own Back/Next bar. Hidden on the progress and done
+        # pages: mid-install there is nowhere to go, and the done page has
+        # its own Close and Restart now row (DonePage).
+        self.nav = nav
 
         self.pages = {
             "welcome": WelcomePage(self), "source": SourcePage(self),
@@ -111,8 +115,17 @@ class InstallerWindow(Gtk.ApplicationWindow):
             return
         name = PAGE_ORDER[self.index]
         page = self.pages[name]
-        self.back_btn.set_sensitive(name not in ("progress", "done") and self.index > 0)
-        self.next_btn.set_visible(name not in ("progress", "done"))
+        # Back is hidden, not just greyed out, where it has no meaning: the
+        # welcome page has nothing behind it, an install cannot be backed out
+        # of, and the done page is the end. The other frontends hide it the
+        # same way.
+        terminal = name in ("progress", "done")
+        self.back_btn.set_visible(self.index > 0 and not terminal)
+        self.back_btn.set_sensitive(self.index > 0 and not terminal)
+        self.next_btn.set_visible(not terminal)
+        nav = getattr(self, "nav", None)
+        if nav is not None:
+            nav.set_visible(not terminal)
         self.next_btn.set_sensitive(page.can_continue())
         # Branding copy on the two buttons that carry a product's voice:
         # leaving the welcome page and starting the install.

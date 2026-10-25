@@ -469,7 +469,10 @@ class ConfirmPage(Page):
         self.body.set_line_wrap(True)
         self.body.set_no_show_all(True)
         self.pack_start(self.body, False, False, 0)
+        # confirm_warning names the disk that is about to be erased; on_enter
+        # fills in the selected one's path, as KDE, COSMIC and Niri do.
         self.warn_label = _warn_row(core.BRANDING.text("confirm_warning", disk="the selected disk"))
+        self.warn_text = self.warn_label.get_children()[1]
         self.pack_start(self.warn_label, False, False, 0)
         for widget, key in ((self.subtitle, "confirm_subtitle"), (self.body, "confirm_body")):
             line = core.BRANDING.text(key)
@@ -478,17 +481,22 @@ class ConfirmPage(Page):
 
     def on_enter(self):
         r = self.win.build_recipe()
-        lines = [
-            "Image:       " + (r.get("image") or self.win.pages["source"].live_image
-                                 or "this live system"),
-            f"Disk:        {self.win.pages['destination'].selected_disk()['path']}",
-            f"Filesystem:  {r['filesystem']}",
-            f"Encryption:  {encryption_text(r['encryption']['type'] or 'none', '_label')}",
-            f"Hostname:    {r['hostname']}",
+        disk = r.get("disk") or self.win.pages["destination"].selected_disk()["path"]
+        # The same rows, in the same order, as KDE's confirm step.
+        rows = [
+            ("Target disk", disk),
+            ("Filesystem", r["filesystem"]),
+            ("Encryption", encryption_text(r["encryption"]["type"] or "none", "_label")),
+            ("Hostname", r["hostname"]),
+            ("Image", r.get("image") or self.win.pages["source"].live_image
+             or "this live system"),
         ]
         if r.get("user", {}).get("username"):
-            lines.append(f"User:        {r['user']['username']}")
+            rows.append(("User", r["user"]["username"]))
+        width = max(len(k) for k, _ in rows) + 2
+        lines = [f"{k + ':':<{width}}{v}" for k, v in rows]
         self.summary.set_markup("<tt>" + GLib.markup_escape_text("\n".join(lines)) + "</tt>")
+        self.warn_text.set_text(core.BRANDING.text("confirm_warning", disk=disk))
 
 
 class ProgressPage(Page):
@@ -638,9 +646,23 @@ class DonePage(Page):
         self.recovery_box.pack_start(self.recovery_ack, False, False, 0)
         self.pack_start(self.recovery_box, False, False, 8)
 
+        # The page's own action row, where the wizard's Back/Next bar sits on
+        # every other page (the window hides that bar here): Close, and
+        # Restart now -- held while a recovery key is unacknowledged.
+        actions = Gtk.Box(spacing=8)
         self.reboot_btn = Gtk.Button(label=core.BRANDING.text("done_restart") or "Restart now")
+        self.reboot_btn.get_style_context().add_class("suggested-action")
         self.reboot_btn.connect("clicked", lambda *_: core.host_run(["systemctl", "reboot"]))
-        self.pack_start(self.reboot_btn, False, False, 8)
+        self.close_btn = Gtk.Button(label="Close")
+        self.close_btn.connect("clicked", self.__on_close)
+        actions.pack_end(self.reboot_btn, False, False, 0)
+        actions.pack_end(self.close_btn, False, False, 0)
+        self.pack_end(actions, False, False, 0)
+
+    def __on_close(self, *_):
+        top = self.get_toplevel()
+        if isinstance(top, Gtk.Window):
+            top.close()
 
     def __on_copy(self, *_):
         clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)

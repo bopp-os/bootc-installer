@@ -70,12 +70,18 @@ log view. Page titles: `<big><b>` markup, nothing more.
 - Progress page: `GtkProgressBar` (9 steps mapped), current-step label, and a
   *visible by default* mono `GtkTextView` log — XFCE users want to see the
   output, don't hide it.
+- Back is hidden where it means nothing: on the welcome page, during the
+  install and on the done page. The Back/Next bar disappears on the progress
+  and done pages; the done page has its own **Close** and **Restart now**
+  row, and Restart now stays insensitive until a recovery key, when there is
+  one, is acknowledged.
 
 ## Copy
 
 Plain, complete sentences, no jargon left unexplained: encryption options say
 what they mean ("Passphrase — you'll type it at every boot", "TPM — unlocks
-automatically on this hardware"). Buttons: Next / Back / Install Now / Reboot.
+automatically on this hardware"). Buttons: Next / Back / Install / Close / Restart now (the welcome,
+Install and Restart now labels are branding copy).
 
 ## Quality floor
 

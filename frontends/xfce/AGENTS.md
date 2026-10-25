@@ -101,8 +101,20 @@ rules. Encryption choices come from `encryption-choices.json`; branch on
 `screenshots.yml` renders every screen headlessly from the real wizard and
 emits the parity report the shared installer matrix consumes, so a UI change
 that breaks capture breaks that cross-installer report too. `tests/test_core.py`
-and `tests/test_readiness.py` are real GTK-free unit tests (`pytest tests/`)
-but are not run in CI — the screenshot job is the only automated gate.
+and `tests/test_readiness.py` are real GTK-free unit tests; the screenshot job
+runs the whole `tests/` suite under `xvfb-run` before it captures.
+
+The capture waits for GTK to paint each page (the frame clock's
+`after-paint`, then an X sync) before grabbing it, with theme animations
+off. Do not go back to "drain until no events are pending": GTK3 paints on
+a timed source, so the grab then read the previous page, and CI committed
+three pairs of identical frames that the widget-tree text still credited.
+A frame that is pixel-identical to the one before it fails the job.
+
+Navigation: Back is hidden on welcome, progress and done; the Back/Next bar
+is hidden on progress and done, and the done page carries its own Close and
+Restart now (`done_restart`), Restart held until a recovery key is
+acknowledged (`tests/test_navigation.py`).
 
 ## Sibling contract
 
