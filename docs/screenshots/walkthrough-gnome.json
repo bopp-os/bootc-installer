@@ -58,7 +58,8 @@
         "confirm"
       ],
       "matched_keywords": [
-        "confirm installation"
+        "confirm installation",
+        "summary"
       ]
     },
     "install": {
@@ -88,102 +89,102 @@
       "name": "welcome",
       "png": "docs/screenshots/01-welcome.png",
       "rendered": true,
-      "colours": 479,
-      "flat": 0.9158001386444835,
-      "ink": 0.007332160187703301,
-      "stddev": 0.058016223619199905,
+      "colours": 468,
+      "flat": 0.9079016342892383,
+      "ink": 0.008633980881899476,
+      "stddev": 0.061933232199801465,
       "text_excerpt": "Welcome to TunaOS Install TunaOS Installs to your internal disk. Install TunaOS Installs to your internal disk. Power Off Power Off Press Super+Alt+S to enable the screen reader Credits Credits"
     },
     {
       "name": "qr_companion",
       "png": "docs/screenshots/02-qr_companion.png",
       "rendered": true,
-      "colours": 513,
-      "flat": 0.9278315469524876,
-      "ink": 0.03745400735882259,
-      "stddev": 0.12188535479799907,
+      "colours": 493,
+      "flat": 0.9292861547949429,
+      "ink": 0.038428923835954365,
+      "stddev": 0.12256275100377967,
       "text_excerpt": "Phone Companion Setup Scan the QR code below with your phone to configure the installer settings.\nBoth devices must be on the same local network. Phone Companion Setup Scan the QR code below with your phone to configure the installer settin"
     },
     {
       "name": "disk",
       "png": "docs/screenshots/03-disk.png",
       "rendered": true,
-      "colours": 501,
-      "flat": 0.847904335306351,
-      "ink": 0.005092518530368475,
-      "stddev": 0.05333824535235833,
+      "colours": 497,
+      "flat": 0.8400555041628122,
+      "ink": 0.004779525131051496,
+      "stddev": 0.05228273936586158,
       "text_excerpt": "Computer is not plugged in \u2014 connect power before installing Install Location Select the disk where you want to install. All data on the selected disk will be permanently erased. Samsung SSD 870 EVO 500GB /dev/sda \u00b7 465.8 GiB \u00b7 SATA Samsung"
     },
     {
       "name": "slurp",
       "png": "docs/screenshots/04-slurp.png",
       "rendered": true,
-      "colours": 222,
-      "flat": 0.9597864341705327,
-      "ink": 0.010011731456300325,
-      "stddev": 0.07179881677978242,
+      "colours": 229,
+      "flat": 0.9595975948196115,
+      "ink": 0.01192568609312365,
+      "stddev": 0.07742611970011852,
       "text_excerpt": "Bring Your Files We can copy documents, pictures, and other data from an existing Windows install. Windows data scanning is unavailable in demo mode. Skip Skip"
     },
     {
       "name": "encryption",
       "png": "docs/screenshots/05-encryption.png",
       "rendered": true,
-      "colours": 266,
-      "flat": 0.8679611262198048,
-      "ink": 0.00997173785527649,
-      "stddev": 0.07377502093566715,
+      "colours": 273,
+      "flat": 0.8528754239901326,
+      "ink": 0.011817761332099908,
+      "stddev": 0.07941332912230034,
       "text_excerpt": "Disk Encryption Choose how to protect the data on your disk. Encrypt this disk You'll type it at every boot. Encrypt this disk You'll type it at every boot. Password Password Password Confirm Password Confirm Password Confirm Password Use h"
     },
     {
       "name": "confirm",
       "png": "docs/screenshots/06-confirm.png",
       "rendered": true,
-      "colours": 233,
-      "flat": 0.9202527595584706,
-      "ink": 0.0060856929557937395,
-      "stddev": 0.04882923659380253,
-      "text_excerpt": "Confirm installation Hostname Hostname Hostname Encryption TPM + passphrase Encryption TPM + passphrase Install Install"
+      "colours": 395,
+      "flat": 0.8006244218316374,
+      "ink": 0.008695652173913044,
+      "stddev": 0.05835141524275637,
+      "text_excerpt": "Confirm installation Everything on /dev/sda will be erased. This cannot be undone. Everything on /dev/sda will be erased. This cannot be undone. Summary Summary Target disk Samsung SSD 870 EVO 500GB (/dev/sda, 465.8 GiB) Target disk Samsung"
     },
     {
       "name": "progress",
       "png": "docs/screenshots/07-progress.png",
       "rendered": true,
-      "colours": 165,
-      "flat": 0.9654721911160881,
-      "ink": 0.003919372900335946,
-      "stddev": 0.03934705766021058,
-      "text_excerpt": "Installing TunaOS\u2026 Downloading\u2026 (47 of 71 parts) Do not power off the computer. 35% 0:00 elapsed"
+      "colours": 169,
+      "flat": 0.9676996608078939,
+      "ink": 0.004131976564909035,
+      "stddev": 0.04389329404621792,
+      "text_excerpt": "Installing TunaOS\u2026 Downloading\u2026 (47 of 71 parts) 0:00 elapsed 35% Do not power off the computer."
     },
     {
       "name": "recovery-key",
       "png": "docs/screenshots/08-recovery-key.png",
       "rendered": true,
-      "colours": 257,
-      "flat": 0.9330707086866101,
-      "ink": 0.007305497787020743,
-      "stddev": 0.06271597501907249,
+      "colours": 262,
+      "flat": 0.9287311131668209,
+      "ink": 0.010430157261794635,
+      "stddev": 0.0709391709935966,
       "text_excerpt": "Save your recovery key If your disk fails to unlock automatically, you will need this recovery key to access your data. Save it somewhere safe, like a password manager or a printed copy. mkta-rdcw-nnhu-fnbx-kwnv-oixz-ahhh-uahf I have saved "
     },
     {
       "name": "done",
       "png": "docs/screenshots/09-done.png",
       "rendered": true,
-      "colours": 275,
-      "flat": 0.9626726390444196,
-      "ink": 0.008765264224390765,
-      "stddev": 0.05919872667796244,
+      "colours": 251,
+      "flat": 0.9622417514646932,
+      "ink": 0.010414739438791242,
+      "stddev": 0.06402914218081045,
       "text_excerpt": "TunaOS is installed Remove the installation media and restart the computer. Show Log Show Log Restart now Restart now"
     }
   ],
   "transition_pixels": [
-    77159,
-    93183,
-    54130,
-    34271,
-    35765,
-    30910,
-    43981,
-    41947
+    67446,
+    77940,
+    48902,
+    33464,
+    45535,
+    35579,
+    37319,
+    38843
   ],
   "spec_drift": [],
   "notes": "GPU-less capture: pages are driven programmatically and text is read from the widget tree, so this reports SCREEN PARITY only. It does not measure keyboard navigation, compositor rendering, or that the frontend launches under its real desktop \u2014 those stay the VM walkthrough's job."
