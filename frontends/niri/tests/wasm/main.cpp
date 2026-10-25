@@ -41,10 +41,24 @@ struct Page {
 
 // The same list, in the same order, as PAGES in capture-screens.py.
 const Page kPages[] = {
-    {"01-welcome", 0},  {"02-disk", 1},     {"03-encryption", 2},
-    {"04-confirm", 3},  {"05-progress", 4}, {"06-done", 5},
-    {"07-recovery", 5},
+    {"01-welcome", 0}, {"02-disk", 1},     {"03-encryption", 2},
+    {"04-account", 3}, {"05-confirm", 4},  {"06-progress", 5},
+    {"07-done", 6},    {"08-recovery", 6},
 };
+
+// Page positions by role, as PROGRESS_PAGE / DONE_PAGE in capture-screens.py.
+constexpr int kProgressPage = 5;
+constexpr int kDonePage = 6;
+
+// The account fields, filled as ACCOUNT in capture-screens.py, so the
+// account and confirm frames show a user.
+void fillAccount(QObject *root)
+{
+    root->setProperty("username", QStringLiteral("alex"));
+    root->setProperty("fullname", QStringLiteral("Alex Example"));
+    root->setProperty("userPassword", QStringLiteral("capture"));
+    root->setProperty("userPasswordConfirm", QStringLiteral("capture"));
+}
 
 // The event fisherman emits after TPM enrolment, as in capture-screens.py.
 // It goes in through appendLog(), so the frame exercises the parse.
@@ -176,17 +190,18 @@ std::string niriShow(const std::string &wanted)
 
     QObject *root = g_window;
     g_current.clear();
+    fillAccount(root);
     root->setProperty("currentPage", page->index);
     int settleMs = 300;
-    if (page->index == 4) {
+    if (page->index == kProgressPage) {
         // Through appendLog(), the function a real install calls.
         for (const QString &line : fixtureLines())
             appendLog(root, line);
         settleMs = 1000;
     }
-    if (page->index == 5)
+    if (page->index == kDonePage)
         root->setProperty("installSuccess", true);
-    if (name == QLatin1String("07-recovery"))
+    if (name == QLatin1String("08-recovery"))
         appendLog(root, QString::fromLatin1(kRecoveryEvent));
     confirmAfterFrame(name, settleMs);
     return "ok";
@@ -205,9 +220,9 @@ std::string niriState()
         const QString text = acc.join(QLatin1Char(' '));
         state.insert("text", text);
         QJsonObject checks;
-        if (g_current == QLatin1String("05-progress"))
+        if (g_current == QLatin1String("06-progress"))
             checks.insert("progress-bar", progressCheck());
-        if (g_current == QLatin1String("07-recovery"))
+        if (g_current == QLatin1String("08-recovery"))
             checks.insert("recovery-key", recoveryCheck(g_window, text));
         state.insert("checks", checks);
     }

@@ -39,7 +39,25 @@ type Recipe struct {
 	DistroID              string   `json:"distroID"`
 	SelinuxDisabled       bool     `json:"selinuxDisabled"`
 	Hostname              string   `json:"hostname"`
+	// User is the account fisherman creates. Left out (nil), fisherman
+	// creates none; normalizeRecipe drops a block with no username, the
+	// schema's "empty skips" rule, so it never reaches fisherman half-filled.
+	User *User `json:"user,omitempty"`
 }
+
+// User is the recipe's `user` block (shared/recipe/fisherman-recipe.schema.json).
+// The password travels with the recipe on stdin only, like the passphrase.
+type User struct {
+	Username string   `json:"username"`
+	Fullname string   `json:"fullname"`
+	Password string   `json:"password"`
+	Groups   []string `json:"groups"`
+}
+
+// defaultUserGroups is what the account joins when the UI names no groups:
+// wheel, as on XFCE, because the account the wizard creates is the only one
+// on the installed system and has to be able to administer it.
+var defaultUserGroups = []string{"wheel"}
 
 type Encryption struct {
 	// "none", "luks-passphrase", "tpm2-luks", "tpm2-luks-passphrase"
@@ -188,6 +206,23 @@ func forwardSignals(pgid int, sigs <-chan os.Signal) {
 	}
 }
 
+// normalizeRecipe fills what the UI may leave out before the recipe goes on
+// to fisherman: the branding's distroID, and the user block's groups. A user
+// block with no username is dropped rather than sent: fisherman would skip
+// it anyway, and a password with no account has nowhere to go.
+func normalizeRecipe(recipe *Recipe, distroID string) {
+	if recipe.DistroID == "" {
+		recipe.DistroID = distroID
+	}
+	if recipe.User != nil {
+		if recipe.User.Username == "" {
+			recipe.User = nil
+		} else if recipe.User.Groups == nil {
+			recipe.User.Groups = append([]string(nil), defaultUserGroups...)
+		}
+	}
+}
+
 func runInstall(recipeJSON string) {
 	if len(recipeJSON) == 0 {
 		fmt.Fprintln(os.Stderr, "invalid recipe: empty")
@@ -203,9 +238,7 @@ func runInstall(recipeJSON string) {
 	// are fisherman's to judge and find (tuna-os/fisherman#276): it rejects
 	// an empty image off live media before touching a disk, and exposes the
 	// host's stores when additionalImageStores is absent.
-	if recipe.DistroID == "" {
-		recipe.DistroID = resolveBranding().ID
-	}
+	normalizeRecipe(&recipe, resolveBranding().ID)
 
 	data, err := json.Marshal(recipe)
 	if err != nil {

@@ -33,21 +33,29 @@ Populated from `tuna-installer-niri discover-disks`, which reads `fisherman prob
 Encryption used to be hardcoded to `none` in the recipe with no UI at all, so
 every install came out unencrypted (tuna-os/tunaOS#734). This screen is the fix.
 
-## 4. Confirm
+## 4. Account
 
-![Confirm](screenshots/04-confirm.png)
+![Account](screenshots/04-account.png)
+
+The user the install creates: the recipe's `user` block, in the wheel group.
+Continue is held until there is a username fisherman accepts
+(`validate --json --partial`) and a password typed the same twice.
+
+## 5. Confirm
+
+![Confirm](screenshots/05-confirm.png)
 
 The last screen before anything is written.
 
-## 5. Installing
+## 6. Installing
 
-![Progress](screenshots/05-progress.png)
+![Progress](screenshots/06-progress.png)
 
 Backend output streams into the log as it arrives.
 
-## 6. Done
+## 7. Done
 
-![Done](screenshots/06-done.png)
+![Done](screenshots/07-done.png)
 
 ---
 

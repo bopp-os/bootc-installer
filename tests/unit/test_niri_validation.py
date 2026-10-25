@@ -18,7 +18,7 @@ try:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     os.environ["QML2_IMPORT_PATH"] = str(NIRI / "tests" / "qml-stubs")
     os.environ["QML_IMPORT_PATH"] = os.environ["QML2_IMPORT_PATH"]
-    from PyQt6.QtCore import QMetaObject, Q_RETURN_ARG, QUrl, QVariant
+    from PyQt6.QtCore import QMetaObject, QObject, Q_RETURN_ARG, QUrl, QVariant
     from PyQt6.QtGui import QGuiApplication
     from PyQt6.QtQml import QQmlApplicationEngine
 except ImportError:  # pragma: no cover - the root unit job has no PyQt6
@@ -66,6 +66,49 @@ class NiriAsksFisherman(unittest.TestCase):
         partial = self.call("partialRecipe")
         self.assertEqual(partial["encryption"]["passphrase"], "s3cret")
         self.assertEqual(partial["hostname"], "box")
+
+    def fill_account(self, username="jo", password="pw", again="pw"):
+        self.root.setProperty("problems", {})
+        self.root.setProperty("username", username)
+        self.root.setProperty("userPassword", password)
+        self.root.setProperty("userPasswordConfirm", again)
+
+    def test_the_partial_recipe_asks_about_the_username(self):
+        self.root.setProperty("username", "root")
+        self.assertEqual(self.call("partialRecipe")["user"], {"username": "root"})
+
+    def test_a_username_problem_shows_its_copy_line_and_holds_continue(self):
+        self.fill_account()
+        self.assertTrue(self.root.property("accountReady"))
+        self.root.setProperty("problems", {"user.username": {
+            "field": "user.username", "code": "username_reserved", "message": "m"}})
+        copy = json.loads((NIRI / "installer" / "copy-defaults.json").read_text())
+        self.assertEqual(self.root.property("usernameProblem"),
+                         copy["validate_username_reserved"])
+        self.assertFalse(self.root.property("accountReady"))
+        self.root.setProperty("problems", {})
+
+    def test_continue_needs_a_username_and_matching_passwords(self):
+        self.fill_account(username="")
+        self.assertFalse(self.root.property("accountReady"))
+        self.fill_account(password="", again="")
+        self.assertFalse(self.root.property("accountReady"))
+        self.fill_account(password="pw", again="pX")
+        self.assertFalse(self.root.property("accountReady"))
+        self.fill_account()
+        self.assertTrue(self.root.property("accountReady"))
+
+    def test_install_writes_the_user_block(self):
+        self.fill_account(password="s3cret", again="s3cret")
+        self.root.setProperty("fullname", "Jo Doe")
+        self.root.setProperty("selectedDisk", {"path": "/dev/vda"})
+        QMetaObject.invokeMethod(self.root, "startInstall")
+        written = next(o.property("written") for o in self.root.findChildren(QObject)
+                       if o.property("written") and '"disk"' in o.property("written"))
+        self.assertEqual(json.loads(written)["user"], {
+            "username": "jo", "fullname": "Jo Doe", "password": "s3cret",
+            "groups": ["wheel"]})
+        self.root.setProperty("currentPage", 0)
 
     def offered(self):
         value = self.root.property("offeredEncryptionTypes")

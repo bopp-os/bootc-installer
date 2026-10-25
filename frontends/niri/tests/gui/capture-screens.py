@@ -42,12 +42,23 @@ PAGES = [
     ("01-welcome", 0, "What the installer is about to do."),
     ("02-disk", 1, "Choose the target disk."),
     ("03-encryption", 2, "Encryption choice."),
-    ("04-confirm", 3, "The last screen before anything is written."),
-    ("05-progress", 4, "The install, with live log."),
-    ("06-done", 5, "Finished."),
-    ("07-recovery", 5, "A TPM install: the recovery key, and restart held "
+    ("04-account", 3, "The account the install creates."),
+    ("05-confirm", 4, "The last screen before anything is written."),
+    ("06-progress", 5, "The install, with live log."),
+    ("07-done", 6, "Finished."),
+    ("08-recovery", 6, "A TPM install: the recovery key, and restart held "
                        "until it is acknowledged."),
 ]
+
+# The account page's fields, filled the way a user would leave them: the
+# account frame shows them, and the confirm frame names the user. Neutral
+# values; the passwords are dots on screen.
+ACCOUNT = {"username": "alex", "fullname": "Alex Example",
+           "userPassword": "capture", "userPasswordConfirm": "capture"}
+
+# Pages by role, so the checks below do not hard-code positions twice.
+PROGRESS_PAGE = 5
+DONE_PAGE = 6
 
 # fisherman emits this once, after TPM enrolment, and for a tpm2-luks install
 # it is the only way back into the disk if the TPM state changes (#129). No CI
@@ -261,11 +272,16 @@ def main():
     # copy of fisherman's encryption-choices.json.
     with open(os.path.join(REPO, "installer", "encryption-choices.json"), encoding="utf-8") as fh:
         root.setProperty("encryptionChoices", json.load(fh)["choices"])
+    for prop, value in ACCOUNT.items():
+        root.setProperty(prop, value)
+    if not root.property("accountReady"):
+        print("FAIL: the filled account page still holds Continue", file=sys.stderr)
+        return 1
 
     frames, findings = [], []
     for name, page, _caption in PAGES:
         root.setProperty("currentPage", page)
-        if page == 4:
+        if page == PROGRESS_PAGE:
             # Through appendLog(), the function a real install calls — so the
             # bar, the step caption and the log rendering are all the live
             # code path. Assigning installLog directly, as this used to, is
@@ -278,9 +294,9 @@ def main():
             # Grabbing on the usual 300ms settle can catch it part-way and
             # photograph a bar narrower than the install really is.
             settle(700)
-        if page == 5:
+        if page == DONE_PAGE:
             root.setProperty("installSuccess", True)
-        if name == "07-recovery":
+        if name == "08-recovery":
             QMetaObject.invokeMethod(root, "appendLog",
                                      Q_ARG(QVariant, RECOVERY_EVENT))
             if not root.property("recoveryKey"):
@@ -297,17 +313,23 @@ def main():
         # lays out but paints nothing is invisible to the pixel audit. Fail
         # rather than publish a documentation image of a bar that is not
         # there.
-        if page == 4 and not assert_progress_bar_drawn(window, image):
+        if page == PROGRESS_PAGE and not assert_progress_bar_drawn(window, image):
             sys.exit(1)
         finding = audit(image, name)
         finding["png"] = path
         finding["text"] = " ".join(page_text(window.contentItem()))
 
+        # The account step's purpose is the user block; the confirm screen
+        # is where the user checks it before anything is written.
+        if name in ("04-account", "05-confirm") and ACCOUNT["username"] not in finding["text"]:
+            print(f"  !! the username is not on {name}", file=sys.stderr)
+            sys.exit(1)
+
         # The recovery frame is the one screen where a correct-looking render
         # can still be wrong: the panel can draw without the key in it, and
         # Restart can be live before the acknowledgement. Neither shows up in
         # a pixel histogram.
-        if name == "07-recovery":
+        if name == "08-recovery":
             key = root.property("recoveryKey")
             if key not in finding["text"]:
                 print("  !! the recovery key is not in the rendered text — "
@@ -370,7 +392,7 @@ def main():
         "logoValue": QUrl.fromLocalFile(os.path.abspath(logo_path)).toString(),
     })
     root.setProperty("recoveryKey", "")
-    for page, name in [(0, "welcomeBrandingLogo"), (5, "doneBrandingLogo")]:
+    for page, name in [(0, "welcomeBrandingLogo"), (DONE_PAGE, "doneBrandingLogo")]:
         root.setProperty("currentPage", page)
         root.setProperty("installSuccess", True)
         settle(300)

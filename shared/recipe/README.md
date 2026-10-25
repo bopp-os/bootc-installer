@@ -76,7 +76,7 @@ password is not empty, it matches its confirmation, and how strong it is.
 | GNOME | hostname (disk page), username (user page) | `fisherman_validate.LiveCheck` |
 | KDE | passphrase (encryption step), hostname (confirm step) | `InstallerController::runValidate`, a `QProcess` |
 | COSMIC | hostname, passphrase | `validate::check`, on a blocking task |
-| Niri | hostname, passphrase | the backend's `validate` command, from a QML `Process` |
+| Niri | hostname, username, passphrase | the backend's `validate` command, from a QML `Process` |
 | XFCE | hostname, username, passphrase | `fisherman_validate.LiveCheck` |
 
 ## Encryption choices

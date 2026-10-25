@@ -36,6 +36,12 @@ from PyQt6.QtGui import QGuiApplication
 from PyQt6.QtQml import QQmlApplicationEngine
 
 
+# The account the e2e user types. The VM job installs it for real, so it is
+# a valid name for fisherman (not reserved) and names no product.
+ACCOUNT = {"username": "e2euser", "fullname": "E2E User",
+           "userPassword": "e2e-password", "userPasswordConfirm": "e2e-password"}
+
+
 def settle(ms=200):
     loop = QEventLoop()
     QTimer.singleShot(ms, loop.quit)
@@ -68,15 +74,28 @@ def main():
         sys.exit(f"FAIL: the backend did not list the e2e disk {name}: {disks}")
 
     # Drive the wizard the way a user would reach Install: pick the disk,
-    # walk to Confirm, press Install.
+    # fill the account, walk to Confirm, press Install.
     root.setProperty("branding", facts.get("branding") or {})
     root.setProperty("isLive", facts.get("isLive") is True)
     root.setProperty("liveImage", facts.get("liveImage") or "")
     root.setProperty("encryptionChoices", facts.get("encryptionChoices") or [])
     root.setProperty("disks", disks)
     root.setProperty("selectedDisk", chosen)
+    # The account page (required: this frontend has no image catalog). Its
+    # Continue is held until these are set; advance() is the same call the
+    # button and Enter make, so a page that will not let a user through
+    # fails here rather than in the VM.
     root.setProperty("currentPage", 3)
+    for prop, value in ACCOUNT.items():
+        root.setProperty(prop, value)
+    settle(500)  # the validate debounce, then the stub's answer
+    if not root.property("accountReady"):
+        sys.exit("FAIL: the filled account page holds Continue")
+    QMetaObject.invokeMethod(root, "advance")
     settle(200)
+    if root.property("currentPage") != 4:
+        sys.exit(f"FAIL: Continue on the account page went to page "
+                 f"{root.property('currentPage')}, not Confirm")
     QMetaObject.invokeMethod(root, "startInstall")
     settle(300)
 
@@ -96,6 +115,11 @@ def main():
     print("[e2e] recipe the QML wrote:\n" + json.dumps(recipe, indent=2))
     if recipe.get("disk") != disk:
         sys.exit(f"FAIL: QML chose {recipe.get('disk')!r}, expected {disk!r}")
+    want_user = {"username": ACCOUNT["username"], "fullname": ACCOUNT["fullname"],
+                 "password": ACCOUNT["userPassword"], "groups": ["wheel"]}
+    if recipe.get("user") != want_user:
+        sys.exit(f"FAIL: the recipe's user block is {recipe.get('user')!r}, "
+                 f"expected {want_user!r}")
 
     print(f"[e2e] piping it to {BACKEND} install")
     r = subprocess.run([BACKEND, "install"], input=written, capture_output=True, text=True,

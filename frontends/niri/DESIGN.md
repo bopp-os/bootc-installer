@@ -50,7 +50,7 @@ layout on a runner or a plain runtime, so screenshots do not depend on them.
 ## Layout
 
 ```
-  Step 3 of 6 · Encryption                              ● ● ━━ ● ● ●
+  Step 3 of 7 · Encryption                            ● ● ━━ ● ● ● ●
   ┌──────────────────────────────────────────────────────────────┐
   │  Disk encryption                                             │
   │  Encryption protects your files if the disk is lost…         │
@@ -65,7 +65,7 @@ layout on a runner or a plain runtime, so screenshots do not depend on them.
    Enter  Continue    Shift+Enter  Back    Tab  Next field
 ```
 
-- **Top bar**: "Step n of 6 · name" on the left, the DMS step dots on the
+- **Top bar**: "Step n of 7 · name" on the left, the DMS step dots on the
   right (the active one stretched to a pill).
 - **Pages** are a single column of DMS components: choices are grouped
   `DankListItem` lists with the Material radio, text entry is a filled

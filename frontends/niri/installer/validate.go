@@ -3,7 +3,7 @@ package main
 // `fisherman validate --json --partial -` for the QML, and the encryption
 // choices (shared/recipe/README.md).
 //
-// fisherman owns the hostname, filesystem and encryption rules
+// fisherman owns the hostname, username, filesystem and encryption rules
 // (fisherman/docs/VALIDATE.md). The QML sends a page's fields here as a
 // partial recipe on stdin; this backend hands them to fisherman on stdin too
 // and prints fisherman's answer unchanged. A passphrase never goes on argv,

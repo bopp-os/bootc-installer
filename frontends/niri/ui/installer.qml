@@ -161,14 +161,14 @@ ApplicationWindow {
     }
 
     // Wizard state
-    property int currentPage: 0 // 0=welcome, 1=disk, 2=encryption, 3=confirm, 4=progress, 5=done
-    readonly property var pageNames: ["Welcome", "Disk", "Encryption", "Confirm", "Installing", "Done"]
+    property int currentPage: 0 // 0=welcome, 1=disk, 2=encryption, 3=account, 4=confirm, 5=progress, 6=done
+    readonly property var pageNames: ["Welcome", "Disk", "Encryption", "Account", "Confirm", "Installing", "Done"]
 
     // Slugs for the readiness stamp. Kept in the same order as currentPage
     // above, and matching the names the other frontends use so the tunaOS
     // screen contract reads one vocabulary rather than five.
     function pageSlug(i) {
-        const slugs = ["welcome", "disk", "encryption", "confirm", "installing", "done"]
+        const slugs = ["welcome", "disk", "encryption", "account", "confirm", "installing", "done"]
         return (i >= 0 && i < slugs.length) ? slugs[i] : "unknown"
     }
     // Encryption was previously hardcoded to "none" in the recipe with no UI,
@@ -210,6 +210,20 @@ ApplicationWindow {
     }
     property var selectedDisk: ({})
     property string hostname: branding.defaultHostname || "linux"
+    // The account fisherman creates: the recipe's `user` block. Required:
+    // this frontend has no image catalog to say an image makes its own first
+    // user (needs_user_creation), so, as on XFCE without a catalog entry, the
+    // wizard always creates one. Held in memory and sent only on the
+    // install's stdin, with the rest of the recipe.
+    property string username: ""
+    property string fullname: ""
+    property string userPassword: ""
+    property string userPasswordConfirm: ""
+    readonly property bool passwordsMatch: userPassword === userPasswordConfirm
+    // Continue on the account page: a username and a password, typed the
+    // same twice, and no fisherman problem with the username.
+    readonly property bool accountReady: username !== "" && userPassword !== ""
+        && passwordsMatch && usernameProblem === ""
     property bool installSuccess: false
     // The key fisherman emits once, after TPM enrolment (#129). The
     // "recovery_key" case in renderEvent used to format a log line and keep
@@ -267,6 +281,8 @@ ApplicationWindow {
         return (p.code ? root.text("validate_" + p.code) : "") || p.message || ""
     }
     readonly property string hostnameProblem: problemText("hostname")
+    // user.username: shown through the copy keys validate_username_*.
+    readonly property string usernameProblem: problemText("user.username")
     readonly property string encryptionProblem:
         problemText("encryption.passphrase") || problemText("encryption.type")
     property string pendingValidate: ""
@@ -274,12 +290,14 @@ ApplicationWindow {
     function partialRecipe() {
         const enc = { type: root.encType }
         if (root.needsPassphrase(root.encType)) enc.passphrase = root.passphrase
-        return { hostname: root.hostname, filesystem: "xfs", encryption: enc }
+        return { hostname: root.hostname, filesystem: "xfs", encryption: enc,
+                 user: { username: root.username } }
     }
     function checkFields() { validateTimer.restart() }
     onHostnameChanged: checkFields()
     onPassphraseChanged: checkFields()
     onEncTypeChanged: checkFields()
+    onUsernameChanged: checkFields()
     // The image installed off a live ISO: branding.json's default_image.
     // Empty means the backend refuses ("image is required") rather than
     // installing somebody else's product.
@@ -410,7 +428,7 @@ ApplicationWindow {
         }
         onExited: (code, status) => {
             root.installSuccess = (code === 0)
-            root.currentPage = 5
+            root.currentPage = 6
         }
     }
 
@@ -481,7 +499,7 @@ ApplicationWindow {
         installFraction = 0
         installStepName = ""
         barState = BarMath.newState()
-        currentPage = 4
+        currentPage = 5
         const recipe = {
             disk: selectedDisk.path,
             filesystem: "xfs",
@@ -497,6 +515,15 @@ ApplicationWindow {
             selinuxDisabled: false
             // No additionalImageStores: fisherman exposes the host's stores.
         }
+        // The account, as XFCE writes it; left out with no username (the
+        // schema's "empty skips"), which the account page never lets through.
+        if (root.username !== "")
+            recipe.user = {
+                username: root.username,
+                fullname: root.fullname,
+                password: root.userPassword,
+                groups: ["wheel"]
+            }
         installProc.command = [root.backendBin, "install"]
         root.pendingRecipe = JSON.stringify(recipe)
         installProc.running = true
@@ -511,15 +538,18 @@ ApplicationWindow {
         case 0: discoverProc.running = true; currentPage = 1; break
         case 1: if (selectedDisk.path !== undefined) currentPage = 2; break
         case 2: encryptionPage.next(); break
-        case 3: if (selectedDisk.path !== undefined && root.hostnameProblem === "") startInstall(); break
+        case 3: if (root.accountReady) currentPage = 4; break
+        case 4: if (selectedDisk.path !== undefined && root.hostnameProblem === "" && root.accountReady) startInstall(); break
         }
     }
     function back() {
-        if (currentPage >= 1 && currentPage <= 3) currentPage -= 1
+        if (currentPage >= 1 && currentPage <= 4) currentPage -= 1
     }
     Shortcut {
         sequence: "Return"
         enabled: !passField.activeFocus && !passConfirm.activeFocus && !hostField.activeFocus
+            && !userField.activeFocus && !fullnameField.activeFocus
+            && !userPassField.activeFocus && !userPassConfirm.activeFocus
         onActivated: root.advance()
     }
     Shortcut { sequence: "Shift+Return"; onActivated: root.back() }
@@ -803,7 +833,117 @@ ApplicationWindow {
                 }
             }
 
-            // Page 3: Confirm — the summary on a card, the product's own lines
+            // Page 3: Account — the user fisherman creates (the recipe's
+            // `user` block). The username rules are fisherman's, through
+            // `validate`; that the password is set and typed the same twice
+            // is this page's. The heading names no screen of the parity
+            // contract (shared/walkthrough/parity_report.py).
+            ColumnLayout {
+                id: accountPage
+                spacing: Theme.spacingM
+
+                StyledText {
+                    text: "Your account"
+                    font.pixelSize: Theme.fontSizeXLarge
+                    font.weight: Theme.fontWeightMedium
+                }
+                StyledText {
+                    text: "The account you sign in with. It can administer this computer."
+                    color: Theme.surfaceVariantText
+                    wrapMode: Text.Wrap
+                    Layout.fillWidth: true
+                }
+
+                DankCard {
+                    Layout.fillWidth: true
+                    title: "Account"
+                    GridLayout {
+                        width: parent.width
+                        columns: 2
+                        columnSpacing: Theme.spacingXL
+                        rowSpacing: Theme.spacingS
+
+                        StyledText { text: "Username"; color: Theme.surfaceVariantText }
+                        ColumnLayout {
+                            spacing: 2
+                            DankTextField {
+                                id: userField
+                                objectName: "accountUsername"
+                                text: root.username
+                                onTextEdited: root.username = text
+                                font.family: Theme.monoFontFamily
+                                implicitWidth: 300
+                                isError: root.usernameProblem !== ""
+                            }
+                            // fisherman's username rule, in the copy's words.
+                            StyledText {
+                                text: root.usernameProblem
+                                color: Theme.error
+                                visible: text !== ""
+                                font.pixelSize: Theme.fontSizeSmall
+                                wrapMode: Text.Wrap
+                                Layout.maximumWidth: 300
+                            }
+                        }
+
+                        StyledText { text: "Full name"; color: Theme.surfaceVariantText }
+                        DankTextField {
+                            id: fullnameField
+                            objectName: "accountFullname"
+                            text: root.fullname
+                            onTextEdited: root.fullname = text
+                            placeholderText: "Optional"
+                            implicitWidth: 300
+                        }
+
+                        StyledText { text: "Password"; color: Theme.surfaceVariantText }
+                        DankTextField {
+                            id: userPassField
+                            objectName: "accountPassword"
+                            text: root.userPassword
+                            onTextEdited: root.userPassword = text
+                            echoMode: TextInput.Password
+                            implicitWidth: 300
+                        }
+
+                        StyledText { text: "Password again"; color: Theme.surfaceVariantText }
+                        ColumnLayout {
+                            spacing: 2
+                            DankTextField {
+                                id: userPassConfirm
+                                objectName: "accountPasswordConfirm"
+                                text: root.userPasswordConfirm
+                                onTextEdited: root.userPasswordConfirm = text
+                                echoMode: TextInput.Password
+                                implicitWidth: 300
+                                isError: root.userPasswordConfirm !== "" && !root.passwordsMatch
+                            }
+                            StyledText {
+                                text: "Passwords do not match."
+                                color: Theme.error
+                                visible: root.userPasswordConfirm !== "" && !root.passwordsMatch
+                                font.pixelSize: Theme.fontSizeSmall
+                            }
+                        }
+                    }
+                }
+
+                Item { Layout.fillHeight: true }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    DankButton { text: "Back"; tonal: true; onClicked: root.back() }
+                    Item { Layout.fillWidth: true }
+                    DankButton {
+                        objectName: "accountNextButton"
+                        text: "Continue"
+                        enabled: root.accountReady
+                        onClicked: root.advance()
+                    }
+                }
+            }
+
+            // Page 4: Confirm — the summary on a card, the product's own lines
             // around it, Install in the error tone (it erases a disk).
             ColumnLayout {
                 spacing: Theme.spacingM
@@ -847,6 +987,8 @@ ApplicationWindow {
                         StyledText { text: "xfs"; isMonospace: true }
                         StyledText { text: "Encryption"; color: Theme.surfaceVariantText }
                         StyledText { text: root.encryptionText(root.encType, "_label"); isMonospace: true }
+                        StyledText { text: "Username"; color: Theme.surfaceVariantText }
+                        StyledText { objectName: "confirmUsername"; text: root.username || "—"; isMonospace: true }
                         StyledText { text: "Hostname"; color: Theme.surfaceVariantText }
                         ColumnLayout {
                             spacing: 2
@@ -896,12 +1038,13 @@ ApplicationWindow {
                         text: root.text("confirm_button")
                         destructive: true
                         enabled: root.selectedDisk.path !== undefined && root.hostnameProblem === ""
+                            && root.accountReady
                         onClicked: root.startInstall()
                     }
                 }
             }
 
-            // Page 4: Install progress — determinate bar from the [n/9] lines,
+            // Page 5: Install progress — determinate bar from the [n/9] lines,
             // the log on a card.
             ColumnLayout {
                 spacing: Theme.spacingM
@@ -961,7 +1104,7 @@ ApplicationWindow {
                 }
             }
 
-            // Page 5: Done
+            // Page 6: Done
             Item {
                 ColumnLayout {
                     anchors.centerIn: parent
@@ -1096,10 +1239,10 @@ ApplicationWindow {
         RowLayout {
             Layout.fillWidth: true
             spacing: Theme.spacingL
-            visible: root.currentPage <= 3
+            visible: root.currentPage <= 4
             Repeater {
                 model: [
-                    { key: "Enter", what: root.currentPage === 3 ? root.text("confirm_button") : "Continue" },
+                    { key: "Enter", what: root.currentPage === 4 ? root.text("confirm_button") : "Continue" },
                     { key: "Shift+Enter", what: "Back" },
                     { key: "Tab", what: "Next field" }
                 ]
