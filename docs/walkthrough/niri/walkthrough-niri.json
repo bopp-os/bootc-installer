@@ -1,9 +1,9 @@
 {
   "flavor": "niri",
-  "frames": 7,
-  "rendered_frames": 7,
-  "advanced_transitions": 6,
-  "visual_states": 7,
+  "frames": 8,
+  "rendered_frames": 8,
+  "advanced_transitions": 7,
+  "visual_states": 8,
   "activation_key": null,
   "ocr": false,
   "screens": {
@@ -56,7 +56,7 @@
       "required": true,
       "reached": true,
       "on_pages": [
-        "04-confirm"
+        "05-confirm"
       ],
       "matched_keywords": [
         "confirm installation",
@@ -67,7 +67,7 @@
       "required": false,
       "reached": true,
       "on_pages": [
-        "05-progress"
+        "06-progress"
       ],
       "matched_keywords": [
         "do not power off",
@@ -78,8 +78,8 @@
       "required": false,
       "reached": true,
       "on_pages": [
-        "06-done",
-        "07-recovery"
+        "07-done",
+        "08-recovery"
       ],
       "matched_keywords": [
         "is installed",
@@ -92,79 +92,90 @@
       "name": "01-welcome",
       "png": "docs/screenshots/01-welcome.png",
       "rendered": true,
-      "colours": 253,
-      "flat": 0.9539333333333333,
-      "ink": 0.0388,
-      "stddev": 0.10766094481720725,
-      "text_excerpt": "Step 1 of 6 \u00b7 Welcome \u2b22 Welcome to TunaOS This wizard will guide you through installing TunaOS onto your computer. Get started Get started Enter Continue Tab Next field"
+      "colours": 252,
+      "flat": 0.9538666666666666,
+      "ink": 0.038766666666666665,
+      "stddev": 0.10764450748304957,
+      "text_excerpt": "Step 1 of 7 \u00b7 Welcome \u2b22 Welcome to TunaOS This wizard will guide you through installing TunaOS onto your computer. Get started Get started Enter Continue Tab Next field"
     },
     {
       "name": "02-disk",
       "png": "docs/screenshots/02-disk.png",
       "rendered": true,
-      "colours": 483,
-      "flat": 0.6203333333333333,
-      "ink": 0.10976666666666667,
-      "stddev": 0.10513134332625781,
-      "text_excerpt": "Step 2 of 6 \u00b7 Disk Destination Everything on /dev/sda will be erased. This cannot be undone. Samsung SSD 870 EVO 500GB /dev/sda  \u00b7  465.8 GiB  \u00b7  SATA Extreme SSD /dev/sdc  \u00b7  931.5 GiB  \u00b7  USB Cruzer Blade /dev/sdd  \u00b7  59.6 GiB  \u00b7  USB WD_"
+      "colours": 482,
+      "flat": 0.6202666666666666,
+      "ink": 0.10973333333333334,
+      "stddev": 0.10510647374992922,
+      "text_excerpt": "Step 2 of 7 \u00b7 Disk Destination Everything on /dev/sda will be erased. This cannot be undone. Samsung SSD 870 EVO 500GB /dev/sda  \u00b7  465.8 GiB  \u00b7  SATA Extreme SSD /dev/sdc  \u00b7  931.5 GiB  \u00b7  USB Cruzer Blade /dev/sdd  \u00b7  59.6 GiB  \u00b7  USB WD_"
     },
     {
       "name": "03-encryption",
       "png": "docs/screenshots/03-encryption.png",
       "rendered": true,
-      "colours": 450,
-      "flat": 0.6162,
+      "colours": 452,
+      "flat": 0.6160666666666667,
       "ink": 0.11353333333333333,
-      "stddev": 0.11051476375489575,
-      "text_excerpt": "Step 3 of 6 \u00b7 Encryption Disk encryption Encryption protects your files if the disk is lost or stolen. It cannot be turned on later without reinstalling. No encryption Anyone with the disk can read your files. Passphrase You'll type it at e"
+      "stddev": 0.11047765211803984,
+      "text_excerpt": "Step 3 of 7 \u00b7 Encryption Disk encryption Encryption protects your files if the disk is lost or stolen. It cannot be turned on later without reinstalling. No encryption Anyone with the disk can read your files. Passphrase You'll type it at e"
     },
     {
-      "name": "04-confirm",
-      "png": "docs/screenshots/04-confirm.png",
+      "name": "04-account",
+      "png": "docs/screenshots/04-account.png",
       "rendered": true,
-      "colours": 384,
-      "flat": 0.6189666666666667,
-      "ink": 0.025933333333333333,
-      "stddev": 0.09449853069713464,
-      "text_excerpt": "Step 4 of 6 \u00b7 Confirm Confirm installation \u26a0  Everything on /dev/sda will be erased. This cannot be undone. Summary Target disk /dev/sda Filesystem xfs Encryption No encryption Hostname tunaos Image ghcr.io/tuna-os/albacore:gnome Back Back "
+      "colours": 324,
+      "flat": 0.6013333333333334,
+      "ink": 0.029233333333333333,
+      "stddev": 0.09884948104720706,
+      "text_excerpt": "Step 4 of 7 \u00b7 Account Your account The account you sign in with. It can administer this computer. Account Username alex Full name Alex Example Password capture Password again capture Back Back Continue Continue Enter Continue Shift+Enter Ba"
     },
     {
-      "name": "05-progress",
-      "png": "docs/screenshots/05-progress.png",
+      "name": "05-confirm",
+      "png": "docs/screenshots/05-confirm.png",
+      "rendered": true,
+      "colours": 400,
+      "flat": 0.5812333333333334,
+      "ink": 0.0272,
+      "stddev": 0.0962046416306421,
+      "text_excerpt": "Step 5 of 7 \u00b7 Confirm Confirm installation \u26a0  Everything on /dev/sda will be erased. This cannot be undone. Summary Target disk /dev/sda Filesystem xfs Encryption No encryption Username alex Hostname tunaos Image ghcr.io/tuna-os/albacore:gn"
+    },
+    {
+      "name": "06-progress",
+      "png": "docs/screenshots/06-progress.png",
       "rendered": true,
       "colours": 260,
       "flat": 0.6350333333333333,
-      "ink": 0.0187,
-      "stddev": 0.08433593232152987,
-      "text_excerpt": "Step 5 of 6 \u00b7 Installing Installing TunaOS\u2026 Step 5 of 8 \u2014 Installing OS [1/8] Partitioning disk\n[2/8] Formatting EFI partition\n[3/8] Formatting root filesystem\n[4/8] Mounting filesystem\n[5/8] Installing OS\n  Pulling image: layer 18/71\n  Pul"
+      "ink": 0.0188,
+      "stddev": 0.08456309075516164,
+      "text_excerpt": "Step 6 of 7 \u00b7 Installing Installing TunaOS\u2026 Step 5 of 8 \u2014 Installing OS [1/8] Partitioning disk\n[2/8] Formatting EFI partition\n[3/8] Formatting root filesystem\n[4/8] Mounting filesystem\n[5/8] Installing OS\n  Pulling image: layer 18/71\n  Pul"
     },
     {
-      "name": "06-done",
-      "png": "docs/screenshots/06-done.png",
+      "name": "07-done",
+      "png": "docs/screenshots/07-done.png",
       "rendered": true,
-      "colours": 197,
+      "colours": 196,
       "flat": 0.9602666666666667,
       "ink": 0.017766666666666667,
-      "stddev": 0.08847120912641952,
-      "text_excerpt": "Step 6 of 6 \u00b7 Done \u2713 TunaOS is installed Remove the installation media and restart the computer. Close Close Restart now Restart now"
+      "stddev": 0.08858900908435582,
+      "text_excerpt": "Step 7 of 7 \u00b7 Done \u2713 TunaOS is installed Remove the installation media and restart the computer. Close Close Restart now Restart now"
     },
     {
-      "name": "07-recovery",
-      "png": "docs/screenshots/07-recovery.png",
+      "name": "08-recovery",
+      "png": "docs/screenshots/08-recovery.png",
       "rendered": true,
       "colours": 392,
       "flat": 0.9108,
       "ink": 0.026266666666666667,
-      "stddev": 0.09522523880532967,
-      "text_excerpt": "Step 6 of 6 \u00b7 Done \u2713 TunaOS is installed Remove the installation media and restart the computer. Save your recovery key If your disk fails to unlock automatically, you will need this recovery key to access your data. Save it somewhere safe,"
+      "stddev": 0.09533321008847333,
+      "text_excerpt": "Step 7 of 7 \u00b7 Done \u2713 TunaOS is installed Remove the installation media and restart the computer. Save your recovery key If your disk fails to unlock automatically, you will need this recovery key to access your data. Save it somewhere safe,"
     }
   ],
   "transition_pixels": [
     75816,
-    14589,
-    188977,
-    212497,
-    308479,
+    14583,
+    183220,
+    60239,
+    194199,
+    308485,
     53687
   ],
   "spec_drift": [],

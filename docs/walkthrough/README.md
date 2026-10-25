@@ -26,7 +26,7 @@ harness does not read its widget text yet) · ⏳ no capture on record.
 | GNOME | 8 | 8 | 7 | tests/gui/capture-screens.py (GTK4/libadwaita under Xvfb) |
 | KDE Plasma | 7 | 7 | 6 | tests/capture.cpp (Kirigami/QML, offscreen) |
 | COSMIC | 7 | 7 | 6 | src/capture.rs (libcosmic on lavapipe under Xvfb) |
-| Niri | 7 | 7 | 6 | tests/gui/capture-screens.py (QML via PyQt6, offscreen) |
+| Niri | 8 | 8 | 7 | tests/gui/capture-screens.py (QML via PyQt6, offscreen) |
 | XFCE | 9 | 9 | 8 | tests/gui/capture-screens.py (GTK3 under Xvfb) |
 
 ## GNOME
@@ -88,15 +88,16 @@ Quickshell QML + Go backend. Source: `frontends/niri/`.
 
 | | |
 |---|---|
-| <img src="niri/01-welcome.png" width="360"> | **welcome**  <br><sub>Step 1 of 6 · Welcome ⬢ Welcome to TunaOS This wizard will guide you through installing TunaOS onto your computer. Get started Get started E</sub> |
-| <img src="niri/02-disk.png" width="360"> | **disk**  <br><sub>Step 2 of 6 · Disk Destination Everything on /dev/sda will be erased. This cannot be undone. Samsung SSD 870 EVO 500GB /dev/sda  ·  465.8 Gi</sub> |
-| <img src="niri/03-encryption.png" width="360"> | **encryption**  <br><sub>Step 3 of 6 · Encryption Disk encryption Encryption protects your files if the disk is lost or stolen. It cannot be turned on later without </sub> |
-| <img src="niri/04-confirm.png" width="360"> | **confirm**  <br><sub>Step 4 of 6 · Confirm Confirm installation ⚠  Everything on /dev/sda will be erased. This cannot be undone. Summary Target disk /dev/sda Fil</sub> |
-| <img src="niri/05-progress.png" width="360"> | **progress**  <br><sub>Step 5 of 6 · Installing Installing TunaOS… Step 5 of 8 — Installing OS [1/8] Partitioning disk
+| <img src="niri/01-welcome.png" width="360"> | **welcome**  <br><sub>Step 1 of 7 · Welcome ⬢ Welcome to TunaOS This wizard will guide you through installing TunaOS onto your computer. Get started Get started E</sub> |
+| <img src="niri/02-disk.png" width="360"> | **disk**  <br><sub>Step 2 of 7 · Disk Destination Everything on /dev/sda will be erased. This cannot be undone. Samsung SSD 870 EVO 500GB /dev/sda  ·  465.8 Gi</sub> |
+| <img src="niri/03-encryption.png" width="360"> | **encryption**  <br><sub>Step 3 of 7 · Encryption Disk encryption Encryption protects your files if the disk is lost or stolen. It cannot be turned on later without </sub> |
+| <img src="niri/04-account.png" width="360"> | **account**  <br><sub>Step 4 of 7 · Account Your account The account you sign in with. It can administer this computer. Account Username alex Full name Alex Examp</sub> |
+| <img src="niri/05-confirm.png" width="360"> | **confirm**  <br><sub>Step 5 of 7 · Confirm Confirm installation ⚠  Everything on /dev/sda will be erased. This cannot be undone. Summary Target disk /dev/sda Fil</sub> |
+| <img src="niri/06-progress.png" width="360"> | **progress**  <br><sub>Step 6 of 7 · Installing Installing TunaOS… Step 5 of 8 — Installing OS [1/8] Partitioning disk
 [2/8] Formatting EFI partition
 [3/8] Formatt</sub> |
-| <img src="niri/06-done.png" width="360"> | **done**  <br><sub>Step 6 of 6 · Done ✓ TunaOS is installed Remove the installation media and restart the computer. Close Close Restart now Restart now</sub> |
-| <img src="niri/07-recovery.png" width="360"> | **recovery**  <br><sub>Step 6 of 6 · Done ✓ TunaOS is installed Remove the installation media and restart the computer. Save your recovery key If your disk fails t</sub> |
+| <img src="niri/07-done.png" width="360"> | **done**  <br><sub>Step 7 of 7 · Done ✓ TunaOS is installed Remove the installation media and restart the computer. Close Close Restart now Restart now</sub> |
+| <img src="niri/08-recovery.png" width="360"> | **recovery**  <br><sub>Step 7 of 7 · Done ✓ TunaOS is installed Remove the installation media and restart the computer. Save your recovery key If your disk fails t</sub> |
 
 ## XFCE
 
