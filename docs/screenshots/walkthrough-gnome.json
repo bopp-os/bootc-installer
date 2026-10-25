@@ -100,19 +100,19 @@
       "png": "docs/screenshots/02-qr_companion.png",
       "rendered": true,
       "colours": 290,
-      "flat": 0.8550329380764163,
-      "ink": 0.033122529644268775,
-      "stddev": 0.14985093412907025,
+      "flat": 0.8550461133069829,
+      "ink": 0.033148880105401846,
+      "stddev": 0.14987679303604312,
       "text_excerpt": "Set Up From Your Phone Type your account details on your phone instead of this keyboard. Both devices need to be on the same network. No QR code on this system. Copy the link and open it on your phone. 1 Open the camera on your phone 2 Poin"
     },
     {
       "name": "disk",
       "png": "docs/screenshots/03-disk.png",
       "rendered": true,
-      "colours": 506,
-      "flat": 0.7396837944664032,
-      "ink": 0.0076284584980237154,
-      "stddev": 0.06691527182189466,
+      "colours": 277,
+      "flat": 0.7448089591567852,
+      "ink": 0.020276679841897235,
+      "stddev": 0.10832482298304098,
       "text_excerpt": "Computer is not plugged in \u2014 connect power before installing Install Location Select the disk where you want to install. All data on the selected disk will be permanently erased. Samsung SSD 870 EVO 500GB /dev/sda \u00b7 465.8 GiB \u00b7 SATA Samsung"
     },
     {
@@ -139,10 +139,10 @@
       "name": "confirm",
       "png": "docs/screenshots/06-confirm.png",
       "rendered": true,
-      "colours": 373,
+      "colours": 374,
       "flat": 0.6715415019762846,
       "ink": 0.014650856389986824,
-      "stddev": 0.07563854771022409,
+      "stddev": 0.08087432480781388,
       "text_excerpt": "Confirm installation Everything on /dev/sda will be erased. This cannot be undone. Everything on /dev/sda will be erased. This cannot be undone. Summary Summary Target disk Samsung SSD 870 EVO 500GB (/dev/sda, 465.8 GiB) Target disk Samsung"
     },
     {
@@ -177,12 +177,12 @@
     }
   ],
   "transition_pixels": [
-    54965,
-    66624,
-    47979,
+    54963,
+    68060,
+    44325,
     32752,
-    45074,
-    34824,
+    45091,
+    34844,
     37080,
     38773
   ],
