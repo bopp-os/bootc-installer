@@ -24,7 +24,7 @@ harness does not read its widget text yet) · ⏳ no capture on record.
 | Frontend | Pages | Rendered | Transitions | Harness |
 |---|---|---|---|---|
 | GNOME | 8 | 8 | 7 | tests/gui/capture-screens.py (GTK4/libadwaita under Xvfb) |
-| KDE Plasma | 7 | 7 | 6 | tests/capture.cpp (Kirigami/QML, offscreen) |
+| KDE Plasma | 8 | 8 | 7 | tests/capture.cpp (Kirigami/QML, offscreen) |
 | COSMIC | 8 | 8 | 7 | src/capture.rs (libcosmic on lavapipe under Xvfb) |
 | Niri | 8 | 8 | 7 | tests/gui/capture-screens.py (QML via PyQt6, offscreen) |
 | XFCE | 9 | 9 | 8 | tests/gui/capture-screens.py (GTK3 under Xvfb) |
@@ -57,10 +57,11 @@ Qt 6 / Kirigami (C++ + QML). Source: `frontends/kde/`.
 | <img src="kde/01-welcome.png" width="360"> | **welcome**  |
 | <img src="kde/02-disk.png" width="360"> | **disk**  |
 | <img src="kde/03-encryption.png" width="360"> | **encryption**  |
-| <img src="kde/04-confirm.png" width="360"> | **confirm**  |
-| <img src="kde/05-progress.png" width="360"> | **progress**  |
-| <img src="kde/06-done.png" width="360"> | **done**  |
-| <img src="kde/07-recovery.png" width="360"> | **recovery**  |
+| <img src="kde/04-account.png" width="360"> | **account**  |
+| <img src="kde/05-confirm.png" width="360"> | **confirm**  |
+| <img src="kde/06-progress.png" width="360"> | **progress**  |
+| <img src="kde/07-done.png" width="360"> | **done**  |
+| <img src="kde/08-recovery.png" width="360"> | **recovery**  |
 
 ## COSMIC
 
