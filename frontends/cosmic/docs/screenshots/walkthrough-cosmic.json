@@ -46,10 +46,12 @@
       "required": false,
       "reached": true,
       "on_pages": [
-        "options"
+        "options",
+        "confirm"
       ],
       "matched_keywords": [
-        "disk encryption"
+        "disk encryption",
+        "encryption passphrase"
       ]
     },
     "summary": {
@@ -92,10 +94,10 @@
       "name": "welcome",
       "png": "docs/screenshots/01-welcome.png",
       "rendered": true,
-      "colours": 197,
-      "flat": 0.964545268437484,
-      "ink": 0.987857618097139,
-      "stddev": 0.07523797002921304,
+      "colours": 291,
+      "flat": 0.9603869184707509,
+      "ink": 0.989853626081171,
+      "stddev": 0.07083172974600574,
       "text_excerpt": "Welcome to TunaOS Welcome. This assistant will guide you through installing TunaOS onto this computer. You will choose a target disk and a few options. Nothing is written to any disk until you confirm on the last step. Get started"
     },
     {
@@ -112,21 +114,21 @@
       "name": "options",
       "png": "docs/screenshots/03-options.png",
       "rendered": true,
-      "colours": 211,
-      "flat": 0.7590843953119403,
-      "ink": 0.9929755872869646,
-      "stddev": 0.06545220817179427,
-      "text_excerpt": "Options Sensible defaults are already chosen. Change them only if you need to. System Computer name tunaos Filesystem xfs Encryption Disk encryption No encryption Anyone with the disk can read your files. Back Continue"
+      "colours": 215,
+      "flat": 0.6286401555862634,
+      "ink": 0.9892906494702902,
+      "stddev": 0.07605480552833375,
+      "text_excerpt": "Options Sensible defaults are already chosen. Change them only if you need to. System Computer name tunaos Filesystem xfs Encryption Disk encryption Passphrase You'll type it at every boot. Passphrase Required to unlock at boot Confirm pass"
     },
     {
       "name": "confirm",
       "png": "docs/screenshots/04-confirm.png",
       "rendered": true,
-      "colours": 307,
+      "colours": 306,
       "flat": 0.5778954910691437,
-      "ink": 0.9909028097650853,
-      "stddev": 0.07404083447046753,
-      "text_excerpt": "Confirm installation The last screen before anything is written. Everything on /dev/sda will be erased. This cannot be undone.  Summary Target disk /dev/sda Filesystem xfs Encryption No encryption Computer name tunaos Image ghcr.io/example/"
+      "ink": 0.9908388351502124,
+      "stddev": 0.07411437628315999,
+      "text_excerpt": "Confirm installation The last screen before anything is written. Everything on /dev/sda will be erased. This cannot be undone.  Summary Target disk /dev/sda Filesystem xfs Encryption Passphrase Computer name tunaos Image ghcr.io/example/os:"
     },
     {
       "name": "installing",
@@ -142,30 +144,30 @@
       "name": "done",
       "png": "docs/screenshots/06-done.png",
       "rendered": true,
-      "colours": 210,
-      "flat": 0.9706356517733763,
-      "ink": 0.9919264036030503,
-      "stddev": 0.05890976902205662,
+      "colours": 352,
+      "flat": 0.9632401862940785,
+      "ink": 0.9915297609908388,
+      "stddev": 0.06284652761223562,
       "text_excerpt": "TunaOS is installed Remove the installation media and restart the computer. Restart now Close"
     },
     {
       "name": "recovery",
       "png": "docs/screenshots/07-recovery.png",
       "rendered": true,
-      "colours": 269,
-      "flat": 0.9534264803725881,
-      "ink": 0.991580940682737,
-      "stddev": 0.06861763196467403,
+      "colours": 393,
+      "flat": 0.9425891806131327,
+      "ink": 0.9902118839244588,
+      "stddev": 0.0746870012436099,
       "text_excerpt": "TunaOS is installed Remove the installation media and restart the computer. Save your recovery key If your disk fails to unlock automatically, you will need this recovery key to access your data. Save it somewhere safe, like a password mana"
     }
   ],
   "transition_pixels": [
-    389212,
-    250653,
-    240641,
-    177362,
-    347534,
-    24670
+    389152,
+    165727,
+    159609,
+    177291,
+    347455,
+    31623
   ],
   "spec_drift": [],
   "notes": "Text comes from the strings the harness rendered each page from (the same constants the view reads), not from a widget tree or OCR, so this reports SCREEN PARITY only. It does not measure keyboard navigation, compositor rendering, or that the frontend launches under its real desktop \u2014 those stay the VM walkthrough's job."
