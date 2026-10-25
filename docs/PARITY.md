@@ -139,7 +139,6 @@ All five render the identity keys (`name`, `id`, `default_hostname`,
 | Hostname | generated, editable on confirm | no (branding default, shown on confirm) | field | field on confirm | field |
 | User account | yes (companion or wizard) | no | no | no | yes |
 | Phone companion (QR) | yes | no | no | no | no |
-| Windows data migration (slurp) | yes | no | no | no | no |
 | Keyboard / language / timezone | yes | no | no | no | no |
 | Progress bar from fisherman's protocol | yes | yes | yes | yes | yes |
 | Restart from the done page | yes | yes | yes | yes | yes |
@@ -173,6 +172,8 @@ All five render the identity keys (`name`, `id`, `default_hostname`,
    for artwork. Every resolver already resolves the keys, so this is view
    work only. KDE and COSMIC now show `welcome_image` and
    `complete_image` as the welcome and done artwork, ahead of `logo`.
-6. **Companion, slurp, locale steps**: GNOME-only by design for now. The
+6. **Companion and locale steps**: GNOME-only by design for now. Windows
+   data migration (slurp) is not an installer feature at all: it belongs to
+   wootc, and no frontend here offers it. The
    contract keeps their copy keys out of `copy-defaults.json`, so nothing
    else pretends to have them.

@@ -282,8 +282,9 @@ Findings:
 These are contract-level, so fix them in `shared/` once and let the parity
 report enforce them.
 
-1. **Step order and count.** GNOME 9 pages (welcome, phone, disk, slurp,
-   encryption, confirm, progress, recovery key, done), XFCE 8 (adds source,
+1. **Step order and count.** GNOME 8 pages (welcome, phone, disk,
+   encryption, confirm, progress, recovery key, done; Windows data migration
+   moved out to wootc), XFCE 8 (adds source,
    identity), KDE/COSMIC/Niri 6. Users moving between TunaOS spins meet
    three different wizards. Agree one canonical order (Welcome → Disk →
    Options/Encryption → Identity → Confirm → Progress → Done, optional

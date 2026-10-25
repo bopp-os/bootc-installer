@@ -29,7 +29,7 @@ class SharedRecipeSchemaTests(unittest.TestCase):
         """Every top-level `json:"..."` tag on fisherman's Recipe struct is a
         schema property. The schema used to list 13 of the backend's 26
         fields, so a frontend validating against it could not express what
-        GNOME already writes (user, slurp, varDisk, customMounts...)."""
+        GNOME already writes (user, varDisk, customMounts...)."""
         recipe_go = REPO / "fisherman" / "fisherman" / "internal" / "recipe" / "recipe.go"
         if not recipe_go.exists():
             self.skipTest("fisherman submodule not checked out")

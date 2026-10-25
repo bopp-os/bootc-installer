@@ -40,8 +40,8 @@ sys.path.insert(0, os.path.join(REPO, "shared", "walkthrough"))
 
 os.environ.setdefault("NO_AT_BRIDGE", "1")
 os.environ.setdefault("GTK_A11Y", "none")
-# BOOTC_DEMO makes the slurp (Windows data) step render its demo message
-# instead of resolving a fisherman binary and scanning the disk.
+# BOOTC_DEMO puts the app in demo mode: no fisherman binary is resolved
+# and the progress page replays fisherman's dry-run transcript.
 os.environ.setdefault("BOOTC_DEMO", "1")
 # The repo's own recipe, exactly as the Flatpak ships it. The captured
 # branding therefore follows recipe.json (distro_name / welcome_title); a
@@ -157,7 +157,6 @@ CAPTIONS = {
     "welcome": "What the installer is about to do.",
     "qr_companion": "Optional: scan a QR code and type your account details on your phone.",
     "disk": "Choose the disk. Nothing is written yet.",
-    "slurp": "Bring documents and settings over from an existing Windows install.",
     "encryption": "Full-disk encryption, with or without TPM2.",
     "user": "Your account and password.",
     "confirm": "The last screen before anything is written.",

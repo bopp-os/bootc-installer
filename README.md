@@ -7,7 +7,6 @@
 
 bootc-installer is a graphical installer for [bootc](https://containers.github.io/bootc/) container images.
 It partitions and encrypts the disk, installs the image and prepares the first boot.
-It can also copy your files and settings from Windows.
 
 <p align="center">
   <img src="docs/screenshots/walkthrough.gif" alt="The GNOME installer, screen by screen" width="720">
@@ -42,7 +41,6 @@ For the devel build and a tour of each screen, refer to [Install and use the ins
 - Two boot stacks: systemd-boot with composefs for [Dakota](https://github.com/projectbluefin/dakota), and GRUB2 for Bluefin, Bluefin-LTS and Bazzite.
 - LUKS2 encryption with a passphrase, TPM2, or the two together.
 - Fast first boot: Wi-Fi, Bluetooth, audio names, printers and warm caches.
-- Data import from Windows: documents, photos, music, bookmarks, fonts and wallpapers.
 - A phone companion: scan a QR code and type your account data on a phone.
 - Offline install from a live ISO.
 - Unattended install from a JSON recipe with `--autoinstall`.
@@ -54,7 +52,7 @@ The [guidebook](docs/guide/README.md) has the full documentation:
 | Page | Contents |
 |---|---|
 | [Install and use the installer](docs/guide/installing.md) | Production and devel builds, and the wizard screen by screen |
-| [How an install works](docs/guide/how-it-works.md) | Boot stacks, the nine install steps, encryption, first boot and Windows import |
+| [How an install works](docs/guide/how-it-works.md) | Boot stacks, the nine install steps, encryption and first boot |
 | [Recipes and autoinstall](docs/guide/recipes.md) | Recipe examples, field reference and unattended install |
 | [Customise the installer for your image](docs/guide/customising.md) | Your own catalog and defaults in `/etc/bootc-installer/`, and new catalog images |
 | [Build, test and release](docs/guide/developing.md) | Build, demo mode, tests, screenshots and the release flow |

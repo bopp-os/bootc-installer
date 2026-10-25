@@ -44,16 +44,14 @@ Refer to [the GNOME walkthrough](../gui-walkthrough.md) for the full set.
 | ![Welcome](../screenshots/01-welcome.png) | **Welcome**. Read what the installer will do. |
 | ![Phone companion](../screenshots/02-qr_companion.png) | **Phone companion**. Scan the QR code to type your account data on a phone. This step is optional. |
 | ![Install location](../screenshots/03-disk.png) | **Install location**. Select a disk. The installer does not write to the disk yet. |
-| ![Windows data](../screenshots/04-slurp.png) | **Bring your data**. Select the Windows files to copy to the new system. |
-| ![Encryption](../screenshots/05-encryption.png) | **Disk encryption**. Select LUKS with a passphrase, TPM2, or the two together. |
-| ![Confirm](../screenshots/06-confirm.png) | **Confirm**. Make sure that the data is correct. After this screen, the installer writes to the disk. |
-| ![Installing](../screenshots/07-progress.png) | **Installing**. Wait for the nine steps to complete. Open the log if you want to see more. |
-| ![Recovery key](../screenshots/08-recovery-key.png) | **Recovery key**. Keep the key in a safe place, then confirm. This screen shows only after an encrypted install. |
-| ![Done](../screenshots/09-done.png) | **Done**. Restart into the new system. |
+| ![Encryption](../screenshots/04-encryption.png) | **Disk encryption**. Select LUKS with a passphrase, TPM2, or the two together. |
+| ![Confirm](../screenshots/05-confirm.png) | **Confirm**. Make sure that the data is correct. After this screen, the installer writes to the disk. |
+| ![Installing](../screenshots/06-progress.png) | **Installing**. Wait for the nine steps to complete. Open the log if you want to see more. |
+| ![Recovery key](../screenshots/07-recovery-key.png) | **Recovery key**. Keep the key in a safe place, then confirm. This screen shows only after an encrypted install. |
+| ![Done](../screenshots/08-done.png) | **Done**. Restart into the new system. |
 
 Some screens show only for some images.
 For example, the account screen shows only when the image needs a user account.
-The Windows screen shows only when the installer finds a Windows partition.
 
 ## Other frontends
 

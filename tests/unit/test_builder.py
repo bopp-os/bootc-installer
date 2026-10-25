@@ -13,7 +13,6 @@ _STUBBED_MODULES = (
     "bootc_installer.defaults.disk",
     "bootc_installer.defaults.encryption",
     "bootc_installer.defaults.image",
-    "bootc_installer.defaults.slurp",
     "bootc_installer.defaults.user",
     "bootc_installer.defaults.welcome",
     "bootc_installer.defaults.qr_companion",
@@ -79,10 +78,6 @@ def _import_builder_fresh(default_image="ghcr.io/projectbluefin/bluefin:latest")
         _find_icon_for_imgref=find_icon,
     )
     _stub_module(
-        "bootc_installer.defaults.slurp",
-        BootcDefaultSlurp=type("BootcDefaultSlurp", (), {}),
-    )
-    _stub_module(
         "bootc_installer.defaults.user",
         BootcDefaultUsers=type("BootcDefaultUsers", (), {}),
     )
@@ -122,7 +117,6 @@ class TestBuilder(unittest.TestCase):
                 "disk",
                 "encryption",
                 "image",
-                "slurp",
                 "user",
                 "welcome",
                 "qr_companion",

@@ -252,26 +252,19 @@ class TestManualDisk:
 
 # ── User spec tests ────────────────────────────────────────────────────────────
 
-class TestSlurpSpec:
-    def test_slurp_omitted_when_not_selected(self):
-        path = Processor.gen_install_recipe("log", _auto_finals(), _SYS_RECIPE)
-        r = _load(path)
-        assert "slurp" not in r
+class TestNoWindowsMigration:
+    """Windows data migration (slurp) belongs to wootc, not this installer."""
 
-    def test_slurp_propagated(self):
+    def test_recipe_never_asks_fisherman_to_migrate_windows_data(self):
         finals = _auto_finals()
         finals[0]["slurp"] = {
             "sourcePartition": "/dev/nvme0n1p3",
-            "users": [
-                {
-                    "name": "JohnDoe",
-                    "categories": ["Documents", "Pictures"],
-                }
-            ],
+            "users": [{"name": "JohnDoe", "categories": ["Documents"]}],
         }
         path = Processor.gen_install_recipe("log", finals, _SYS_RECIPE)
         r = _load(path)
-        assert r["slurp"] == finals[0]["slurp"]
+        assert "slurp" not in r
+        assert "slurpWallpapers" not in r
 
 
 class TestUserSpec:

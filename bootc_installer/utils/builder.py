@@ -24,7 +24,6 @@ from bootc_installer.defaults.conn_check import BootcDefaultConnCheck
 from bootc_installer.defaults.disk import BootcDefaultDisk
 from bootc_installer.defaults.encryption import BootcDefaultEncryption
 from bootc_installer.defaults.image import BootcDefaultImage
-from bootc_installer.defaults.slurp import BootcDefaultSlurp
 from bootc_installer.defaults.user import BootcDefaultUsers
 from bootc_installer.defaults.welcome import BootcDefaultWelcome
 from bootc_installer.defaults.qr_companion import BootcDefaultQrCompanion
@@ -38,7 +37,6 @@ templates = {
     "conn-check": BootcDefaultConnCheck,
     "welcome": BootcDefaultWelcome,
     "disk": BootcDefaultDisk,
-    "slurp": BootcDefaultSlurp,
     "encryption": BootcDefaultEncryption,
     "image": BootcDefaultImage,
     "user": BootcDefaultUsers,

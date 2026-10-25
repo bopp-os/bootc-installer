@@ -127,8 +127,7 @@ def _path_is_private(path: str, check_mode: bool = True) -> bool:
 def _stage_fisherman_on_host() -> bool:
     """Copy fisherman binary to a host-visible cache dir so pkexec can find it.
 
-    Thin wrapper over fisherman_runner.stage_on_host, kept because
-    bootc_installer.defaults.slurp imports this name directly.
+    Thin wrapper over fisherman_runner.stage_on_host.
     """
     return fisherman_runner.stage_on_host(
         in_flatpak=_IN_FLATPAK,

@@ -20,12 +20,11 @@ by side and the parity matrix on top, is [`walkthrough/`](walkthrough/README.md)
 | ![Welcome](screenshots/01-welcome.png) | **Welcome**: what the installer is about to do, with power-off and credits. |
 | ![Phone companion](screenshots/02-qr_companion.png) | **Phone companion**: optional QR pairing so the rest of the wizard can be typed from a phone. |
 | ![Install location](screenshots/03-disk.png) | **Install location**: whole disks only, plus the virtual-disk option for VMs. Nothing is written yet. |
-| ![Windows data](screenshots/04-slurp.png) | **Bring your data**: import documents and settings from an existing Windows partition. |
-| ![Encryption](screenshots/05-encryption.png) | **Disk encryption**: LUKS with a passphrase, TPM2, or both. |
-| ![Confirm](screenshots/06-confirm.png) | **Confirm**: the last screen before anything is written. |
-| ![Installing](screenshots/07-progress.png) | **Installing**: fisherman's nine steps, with the log one click away. |
-| ![Recovery key](screenshots/08-recovery-key.png) | **Recovery key**: shown once after an encrypted install and must be acknowledged. |
-| ![Done](screenshots/09-done.png) | **Done**: restart into the new system. |
+| ![Encryption](screenshots/04-encryption.png) | **Disk encryption**: LUKS with a passphrase, TPM2, or both. |
+| ![Confirm](screenshots/05-confirm.png) | **Confirm**: the last screen before anything is written. |
+| ![Installing](screenshots/06-progress.png) | **Installing**: fisherman's nine steps, with the log one click away. |
+| ![Recovery key](screenshots/07-recovery-key.png) | **Recovery key**: shown once after an encrypted install and must be acknowledged. |
+| ![Done](screenshots/08-done.png) | **Done**: restart into the new system. |
 
 The user-account page is part of the wizard but not of this capture. The
 repository's `recipe.json` targets an image with `needs_user_creation: false`.

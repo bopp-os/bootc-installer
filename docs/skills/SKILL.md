@@ -101,7 +101,7 @@ bootc_installer/
 ├── core/         disks.py, system.py, locale.py, locales/
 ├── defaults/     disk.py, encryption.py, user.py, image.py, welcome.py,
 │                 network.py, conn_check.py, nvidia.py, theme.py, vm.py,
-│                 qr_companion.py, slurp.py
+│                 qr_companion.py
 ├── views/        progress.py, done.py, confirm.py, confirm_data.py,
 │                 recovery_key.py, tour.py
 ├── widgets/      page_header.py

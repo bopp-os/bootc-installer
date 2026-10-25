@@ -29,7 +29,7 @@ When adding `.py` files, also add them to `sources = [...]` in the subpackage's 
 ```
 bootc_installer/
 ├── core/       disks, system, keymaps, locales
-├── defaults/   wizard steps (disk, encryption, user, image, slurp…)
+├── defaults/   wizard steps (disk, encryption, user, image…)
 ├── views/      progress, done, confirm, recovery_key, tour, confirm_data
 ├── widgets/    page_header
 ├── windows/    main_window, dialogs, hardware warning windows

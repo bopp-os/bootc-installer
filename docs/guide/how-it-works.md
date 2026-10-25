@@ -48,7 +48,7 @@ fisherman does these steps from the recipe:
 5. **Mount.** fisherman mounts all partitions under `/mnt/fisherman-target`.
 6. **Install with bootc.** fisherman runs `bootc install to-filesystem --skip-finalize` in a privileged podman container. The `--skip-finalize` flag keeps the target writable for the next steps.
 7. **Post-install.** fisherman sets the hostname and copies the Flatpaks. It also does the first-boot tasks below.
-8. **Windows data.** This step is optional. fisherman copies the files that you selected from Windows.
+8. **Windows data.** fisherman does this step only when the recipe asks for it. This installer never asks. Windows data migration is the job of [wootc](https://github.com/tuna-os/wootc).
 9. **Finalize.** fisherman runs `fstrim`, mounts the root read-only, then runs `fsfreeze` and `fsthaw`. This does the work of `bootc install finalize`, which does nothing upstream at this time.
 
 > **Scratch space:** fisherman keeps OCI blobs in `/var/fisherman-tmp` while it pulls an image.
@@ -79,24 +79,11 @@ You do not have to do anything.
 | **Caches** | Makes the font, icon, pixbuf, GIO, ldconfig, man-db and Flatpak caches before first boot. Without this step, first boot is 30 seconds slower or more. |
 | **Printers** | Enables `cups-browsed`, `avahi-daemon` and `ipp-usb`. USB printers and AirPrint work immediately. |
 
-## Windows data (Slurp)
+## Windows data
 
-When the installer finds a Windows partition, it can copy your data.
-It scans the partition in the background.
-Then it shows a checkbox and a size for each category of each user.
-
-| Category | What it copies |
-|---|---|
-| Documents | The files in `Documents`, `Desktop` and `Downloads` |
-| Photos | The files in `Pictures` |
-| Music | The files in `Music` |
-| Bookmarks | Chrome and Edge bookmarks |
-| Fonts | The fonts in `AppData\Local\Microsoft\Windows\Fonts` |
-| Wallpaper | The current and recent wallpapers |
-
-The installer always copies the wallpapers, also when you skip this screen.
-It shows a warning if the selected data is larger than the available RAM.
-It also makes the thumbnails for the GNOME wallpaper picker during the install.
+This installer does not copy data from Windows.
+It erases the whole target disk.
+To keep Windows and move your files into the new system, use [wootc](https://github.com/tuna-os/wootc).
 
 ## Phone companion
 

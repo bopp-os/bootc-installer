@@ -120,7 +120,6 @@ sent to fisherman.
   "steps": {
     "welcome":    { "template": "welcome",    "protected": true },
     "disk":       { "template": "disk" },
-    "slurp":      { "template": "slurp" },
     "encryption": { "template": "encryption" },
     "user":       { "template": "user" }
   },
@@ -155,7 +154,6 @@ sent to fisherman.
 | `welcome` | Welcome / launch screen |
 | `image` | Image selection (omit on live ISOs — removed automatically) |
 | `disk` | Disk selection |
-| `slurp` | Windows data migration wizard |
 | `encryption` | Encryption setup |
 | `user` | User account creation |
 

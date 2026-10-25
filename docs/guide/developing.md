@@ -95,7 +95,6 @@ Some features need lab hardware before a release:
 - TPM2
 - Boot prompts on a physical machine
 - The recovery key and the passphrase fallback
-- Windows data import
 - The offline ISO
 
 Refer to [the release qualification runbook](../../.github/CI_CD_GUIDE.md#release-qualification-runbook).

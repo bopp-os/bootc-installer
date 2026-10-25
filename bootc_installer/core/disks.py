@@ -27,7 +27,7 @@ class Diskutils:
     def separate_device_and_partn(part_dev: str) -> tuple[str, str | None]:
         info_json = subprocess.check_output(
             # An argument list, never a shell string: part_dev can come from
-            # a slurp config, and "/dev/sda1; rm -rf /" in a shell string is
+            # a recipe, and "/dev/sda1; rm -rf /" in a shell string is
             # a command (#163).
             ["lsblk", "--json", "-o", "NAME,PKNAME,PARTN", part_dev],
         ).decode("utf-8")

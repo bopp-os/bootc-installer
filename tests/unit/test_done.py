@@ -85,7 +85,7 @@ class TestDoReboot(unittest.TestCase):
     def setUp(self):
         # test_branding_parity._import_done() reimports done.py during test
         # execution, rebinding done.Gio to whichever stubs are current in
-        # sys.modules.  test_slurp_helpers / test_network_helpers also
+        # sys.modules.  test_network_helpers also
         # overwrite sys.modules["gi.repository.GLib"] with a bare ModuleType
         # that lacks Variant, breaking done.py's D-Bus call path.
         # Rebuilding our own stubs first and then reimporting ensures that

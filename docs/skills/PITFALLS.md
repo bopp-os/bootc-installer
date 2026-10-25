@@ -129,7 +129,7 @@ git rebase origin/dev && git push --force-with-lease
 
 ### Overlapping test PRs
 
-When multiple PRs add to the same test files (`test_branding_parity.py`, `test_done.py`, `test_slurp_helpers.py`):
+When multiple PRs add to the same test files (`test_branding_parity.py`, `test_done.py`):
 1. Rebase each branch onto latest `dev` after every merge
 2. Run `pytest tests/unit/ -q` after every conflict resolution before pushing
 3. "Keep both sides" of an additive test conflict can silently introduce indentation errors
@@ -153,10 +153,9 @@ Every new Python file must appear in `sources = [...]` in its subpackage's `meso
 
 ## fisherman / Install Pipeline
 
-### Windows data slurp timing
+### Windows data (slurp) is not this installer's
 
-The slurp scan must happen BEFORE partitioning — the source disk is often the target disk.  
-RAM scratch: `/run/fisherman-slurp/` (Statfs("/run") minus 2GB reserve).
+No frontend sends `slurp` or `slurpWallpapers`. Windows data migration belongs to wootc, and `fisherman validate` refuses `slurp` without a durable rescue store anyway (`slurp_unsupported`).
 
 ### Offline install detection
 

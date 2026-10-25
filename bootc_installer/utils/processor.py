@@ -400,10 +400,6 @@ class Processor:
             recipe["imageType"] = image_type
         if flatpak_var_path:
             recipe["flatpakVarPath"] = flatpak_var_path
-        if "slurp" in merged and merged["slurp"] is not None:
-            recipe["slurp"] = merged["slurp"]
-        # Easter egg: always attempt to rescue wallpapers from existing Windows installs
-        recipe["slurpWallpapers"] = True
         # Offline image stores: only when the ISO's recipe names them. Left
         # out, fisherman exposes the stores it finds on the host itself
         # (tuna-os/fisherman#276); [] would turn that off.

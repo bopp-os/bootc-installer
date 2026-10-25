@@ -107,7 +107,6 @@ locally is for diagnosing a red `dev`, not a step in releasing.
 | Passphrase fallback | Install with `luks-passphrase`; verify passphrase prompt on reboot |
 | GRUB boot (XFS root) | Install with `filesystem=xfs`; verify GRUB loads from ext4 `/boot` |
 | systemd-boot (btrfs/composefs) | Install with `composeFsBackend=true`; verify `bootctl status` clean |
-| Windows slurp | Run on machine with Windows NTFS partition; verify wallpapers + data migrated |
 | Offline ISO | Boot from live ISO with embedded OCI; verify install completes without internet |
 | Post-reboot WiFi | Install on machine with saved WiFi; verify auto-reconnect after reboot |
 
