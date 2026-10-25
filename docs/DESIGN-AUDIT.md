@@ -53,6 +53,11 @@ Findings:
   "Everything on /dev/nvme0n1 will be erased", and an **Install** button
   with the `destructive-action` style class. Keep the Destiny lines for an
   about-dialog Easter egg if wanted.
+  *Status:* the copy now comes from the branding contract (neutral by
+  default). The summary is a "Summary" `AdwPreferencesGroup` that leads with
+  Target disk (model, path, size), Filesystem, Encryption, Hostname (still
+  editable) and Image. The `confirm_warning` line is in a warning row in its
+  own group above it. The button is still `suggested-action`.
 - **P1 Install Location (03).** Two competing primary actions: **Use Entire
   Disk** (suggested, centred) and **Next** (header, disabled). Initial Setup
   has one forward action per page. Make the row selection enable `Next`, or
@@ -74,6 +79,11 @@ Findings:
   `AdwStatusPage` with a spinner or the step name as title, the progress bar
   inside a clamp, and the log behind a toggle. "0:00 elapsed" in the fixture
   suggests the timer starts before the install starts; verify.
+  *Status:* the title, step, bar, elapsed time, percentage and the
+  `progress_note` line now sit in an `AdwClamp` centred in the page. The video
+  or log pane opens above them once the install starts. "0:00 elapsed" is the
+  label's default text: the timer starts in `BootcProgress.start()`, which the
+  capture never calls.
 - **P3 Welcome (01).** "Press Super+Alt+S to enable the screen reader" as a
   bare caption is fine, but Initial Setup exposes accessibility through the
   header menu; consider the same. "Credits" as a link label should be an

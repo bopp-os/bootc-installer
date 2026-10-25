@@ -42,11 +42,11 @@ claimed a render that nobody had wired up.
 | `confirm_title` | page header | step heading | page title | heading | page title |
 | `confirm_subtitle` | header subtitle | italic label, hidden | page subtitle | label, hidden | label, hidden |
 | `confirm_body` | dim label, hidden | label, hidden | body, hidden | label, hidden | label, hidden |
-| `confirm_warning` | summary warning row | inline message | warning card | warning line | warning row |
+| `confirm_warning` | summary warning row (own group above the summary, `{disk}` filled) | inline message | warning card | warning line | warning row |
 | `confirm_button` | pill button | Next button | forward button | button | Next button |
 | `confirm_quotes` | random line per language | no | no | no | no |
-| `progress_title` | image-writing step label | label | page title | heading | page title |
-| `progress_note` | caption under the step label | label | warning caption | caption | dim label under the bar |
+| `progress_title` | image-writing step label (centred title) | label | page title | heading | page title |
+| `progress_note` | dim caption under the bar | label | warning caption | caption | dim label under the bar |
 | `step_prepare_disk` | step label on the progress page | "Step N of M" caption | "Step N of M" caption | "Step N of M" caption | step label under the title |
 | `step_partition` | step label on the progress page | "Step N of M" caption | "Step N of M" caption | "Step N of M" caption | step label under the title |
 | `step_format_efi` | step label on the progress page | "Step N of M" caption | "Step N of M" caption | "Step N of M" caption | step label under the title |

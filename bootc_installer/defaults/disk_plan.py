@@ -8,6 +8,9 @@ def build_auto_partition_recipe(disk) -> dict:
             "disk": disk.disk,
             "pretty_size": disk.pretty_size,
             "size": disk.size,
+            # For the confirm page only (Processor reads "disk"): the model
+            # names the physical disk that is about to be erased.
+            "model": getattr(disk, "model", "") or "",
             "vgs_to_remove": [],
             "pvs_to_remove": [],
         }

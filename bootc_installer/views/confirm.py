@@ -23,6 +23,41 @@ from bootc_installer.utils.field_check import FieldCheck
 from gi.repository import Adw, GObject, Gtk
 
 
+# What the summary calls each root filesystem: the names the disk page's
+# picker and the filesystems' own tools use.
+_FILESYSTEM_LABELS = {"xfs": "XFS", "ext4": "ext4", "btrfs": "Btrfs", "zfs": "ZFS"}
+
+
+def filesystem_label(fs: str) -> str:
+    return _FILESYSTEM_LABELS.get(fs, fs)
+
+
+def disk_summary(auto: dict) -> str:
+    """The Target disk row's value: the model and the device path, so the
+    user can tell which physical disk is about to be erased, then its size.
+    The model is the probe's (shared/probe); a disk without one shows its
+    path alone."""
+    path = auto.get("disk", "")
+    size = auto.get("pretty_size", "")
+    model = (auto.get("model") or "").strip()
+    if model and model != path:
+        return f"{model} ({path}, {size})" if size else f"{model} ({path})"
+    return f"{path} ({size})" if size else path
+
+
+def recipe_image(recipe: dict) -> str:
+    """The image a recipe installs when no image step chose one, resolved
+    in Processor.gen_install_recipe's order: imgref, the image marked
+    default, the first image."""
+    if recipe.get("imgref"):
+        return recipe["imgref"]
+    images = [i for i in recipe.get("images") or [] if isinstance(i, dict)]
+    for img in images:
+        if img.get("default"):
+            return img.get("imgref", "")
+    return images[0].get("imgref", "") if images else ""
+
+
 @Gtk.Template(resource_path="/org/bootcinstaller/Installer/gtk/widget-choice.ui")
 class BootcChoiceEntry(Adw.ActionRow):
     __gtype_name__ = "BootcChoiceEntry"
@@ -58,6 +93,8 @@ class BootcConfirm(Adw.Bin):
         "installation-confirmed": (GObject.SignalFlags.RUN_FIRST, None, ()),
     }
 
+    group_warning = Gtk.Template.Child()
+    row_warning = Gtk.Template.Child()
     group_changes = Gtk.Template.Child()
     btn_confirm = Gtk.Template.Child()
     lbl_body = Gtk.Template.Child()
@@ -82,6 +119,13 @@ class BootcConfirm(Adw.Bin):
         self.active_widgets = []
 
         selected_language = None
+        # The facts every frontend's summary leads with, in the order KDE,
+        # COSMIC and Niri list them: Target disk, Filesystem, Encryption,
+        # Hostname, Image. GNOME's extra steps (language, keyboard, timezone,
+        # users) and the GPU follow them, in step order.
+        primary = {"disk": [], "filesystem": [], "encryption": [],
+                   "hostname": [], "image": []}
+        erase_disk = None
 
         for final in finals:
             for key, value in final.items():
@@ -112,30 +156,30 @@ class BootcConfirm(Adw.Bin):
                     )
                 elif key == "disk":
                     if "auto" in value:
-                        self.active_widgets.append(
+                        auto = value["auto"]
+                        erase_disk = auto.get("disk", "")
+                        primary["disk"].append(
                             BootcChoiceEntry(
-                                _("Disk"),
-                                f"{value['auto']['disk']} ({value['auto']['pretty_size']})",
+                                _("Target disk"),
+                                disk_summary(auto),
                                 "drive-harddisk-system-symbolic",
                             )
                         )
-                        # Destructive action warning: the branding
-                        # contract's confirm_warning, with {disk} filled in.
-                        # Plain text, not markup -- the line can come from a
-                        # product's branding file.
-                        warning = Adw.ActionRow()
-                        warning.set_use_markup(False)
-                        warning.set_title(
-                            copy_text.text(self.__window, "confirm_warning",
-                                           disk=value["auto"]["disk"])
-                            or _("All data on this disk will be erased. This cannot be undone."))
-                        warning.set_title_lines(0)
-                        warning.add_css_class("error")
-                        self.active_widgets.append(warning)
+                        fs = value.get("filesystem")
+                        if fs:
+                            primary["filesystem"].append(
+                                BootcChoiceEntry(
+                                    _("Filesystem"),
+                                    filesystem_label(fs),
+                                    "drive-multidisk-symbolic",
+                                )
+                            )
                     else:
                         disks = {}
                         # block, device_block
                         for part, info in value.items():
+                            if not isinstance(info, dict):
+                                continue
                             part_disk = re.match(
                                 "^/dev/[a-zA-Z]+([0-9]+[a-z][0-9]+)?",
                                 part,
@@ -143,11 +187,11 @@ class BootcConfirm(Adw.Bin):
                             )[0]
                             if part_disk not in disks:
                                 disks[part_disk] = BootcChoiceExpanderEntry(
-                                    _("Disk"),
+                                    _("Target disk"),
                                     part_disk,
                                     "drive-harddisk-system-symbolic",
                                 )
-                                self.active_widgets.append(disks[part_disk])
+                                primary["disk"].append(disks[part_disk])
 
                             disks[part_disk].add_row(
                                 BootcChoiceEntry(
@@ -158,10 +202,11 @@ class BootcConfirm(Adw.Bin):
                             )
                 elif key == "encryption":
                     enc_type = value.get("type", "none") if isinstance(value, dict) else str(value)
-                    # Branding copy, the same words every frontend uses;
-                    # a type outside the contract shows as itself.
+                    # The shared copy key (encryption_<type>_label), so this row
+                    # uses the same words as the encryption page and the other
+                    # frontends' confirm pages.
                     label = copy_text.encryption_text(self.__window, enc_type, "_label") or enc_type
-                    self.active_widgets.append(
+                    primary["encryption"].append(
                         BootcChoiceEntry(
                             _("Encryption"),
                             label,
@@ -174,7 +219,7 @@ class BootcConfirm(Adw.Bin):
                     entry_row.set_text(value or "")
                     entry_row.set_show_apply_button(False)
                     self._hostname_entry_row = entry_row
-                    self.active_widgets.append(entry_row)
+                    primary["hostname"].append(entry_row)
                     # An edit here is the hostname that gets installed, so
                     # fisherman checks it as the disk page's field is.
                     # A row of its own, under the entry, like the summary.
@@ -182,28 +227,46 @@ class BootcConfirm(Adw.Bin):
                     message.set_use_markup(False)
                     message.set_title_lines(0)
                     message.add_css_class("error")
-                    self.active_widgets.append(message)
+                    primary["hostname"].append(message)
                     self._hostname_check = FieldCheck(
                         self.__window, entry_row, "hostname",
                         lambda text: {"hostname": text.strip()},
                         message, on_change=self.__update_confirm_button)
-                elif key == "selected_image":
+                elif key == "selected_image" and value:
                     pn = final.get("pretty_name") or value
-                    self.active_widgets.append(
+                    primary["image"].append(
                         BootcChoiceEntry(
                             _("Image"),
                             pn,
                             "application-x-appliance-symbolic",
                         )
                     )
-                elif key == "custom_image":
-                    self.active_widgets.append(
+                elif key == "custom_image" and value:
+                    primary["image"].append(
                         BootcChoiceEntry(
                             _("Image"),
                             value,
                             "image-missing-symbolic"
                         )
                     )
+
+        # No image step (live media, or a recipe with one image): the image
+        # is the one the recipe names, resolved as Processor does.
+        if not primary["image"]:
+            recipe = getattr(self.__window, "recipe", None)
+            imgref = recipe_image(recipe if isinstance(recipe, dict) else {})
+            if imgref:
+                primary["image"].append(
+                    BootcChoiceEntry(
+                        _("Image"),
+                        imgref,
+                        "application-x-appliance-symbolic",
+                    )
+                )
+
+        extras = self.active_widgets
+        self.active_widgets = [w for rows in primary.values() for w in rows]
+        self.active_widgets.extend(extras)
 
         # Hardware-detected GPU badge (always shown if a GPU is found)
         from bootc_installer.core.system import Systeminfo
@@ -217,6 +280,19 @@ class BootcConfirm(Adw.Bin):
                     gpu_icon,
                 )
             )
+
+        # Destructive action warning: the branding contract's confirm_warning,
+        # with {disk} filled in, in a row of its own above the summary. Plain
+        # text, not markup -- the line can come from a product's branding
+        # file. Unlike other copy keys an empty line does not hide it: a
+        # whole-disk erase is always announced.
+        warning = ""
+        if erase_disk:
+            warning = (
+                copy_text.text(self.__window, "confirm_warning", disk=erase_disk)
+                or _("All data on this disk will be erased. This cannot be undone."))
+        self.row_warning.set_title(warning)
+        self.group_warning.set_visible(bool(warning))
 
         # Flavour text from the branding contract (shared/branding): a
         # locale-specific quote when the product ships one for the selected

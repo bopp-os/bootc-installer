@@ -4,14 +4,16 @@ using Adw 1;
 template $BootcProgress: Box {
   orientation: vertical;
 
+  // The install video (or its fallback panel). Hidden until the install
+  // starts: before that there is nothing to play, and an empty pane would
+  // push the status to the bottom of the window.
   Box media_box {
-    visible: true;
+    visible: false;
     vexpand: true;
     margin-start: 40;
     margin-end: 40;
     margin-top: 1;
-    margin-bottom: 18;
-    height-request: 550;
+    height-request: 320;
     orientation: vertical;
 
     Overlay {
@@ -134,9 +136,8 @@ template $BootcProgress: Box {
     vexpand: true;
     margin-start: 40;
     margin-end: 40;
-    margin-top: 1;
-    margin-bottom: 18;
-    height-request: 550;
+    margin-top: 24;
+    height-request: 320;
     orientation: vertical;
 
     ScrolledWindow {
@@ -165,92 +166,100 @@ template $BootcProgress: Box {
     ]
   }
 
-  Box {
-    orientation: vertical;
-    margin-start: 40;
-    margin-end: 40;
+  // The install status, in a clamp so it keeps a readable width on a wide
+  // window. With no media or log pane open it is centred in the page; with
+  // one open it sits under the pane at its natural height
+  // (views/progress.py __sync_status_layout).
+  Adw.Clamp status_clamp {
+    maximum-size: 600;
+    tightening-threshold: 480;
+    vexpand: true;
+    valign: center;
+    margin-start: 24;
+    margin-end: 24;
     margin-top: 24;
+    margin-bottom: 32;
 
     Box {
-      orientation: horizontal;
-      spacing: 12;
+      orientation: vertical;
+      spacing: 6;
 
-      Box {
-        orientation: vertical;
-        spacing: 4;
-        halign: start;
-        hexpand: true;
-
-        Label progressbar_text {
-          wrap: true;
-          wrap-mode: word_char;
-          xalign: 0;
-          halign: start;
-          label: _("Installing");
-
-          styles [
-            "title-4",
-          ]
-        }
-
-        Label progress_substep {
-          wrap: true;
-          wrap-mode: word_char;
-          xalign: 0;
-          halign: start;
-          label: "";
-
-          styles [
-            "dim-label",
-            "caption",
-          ]
-        }
-
-        // progress_note from the branding contract, set by views/progress.py.
-        Label progress_note {
-          wrap: true;
-          wrap-mode: word_char;
-          xalign: 0;
-          halign: start;
-          label: "";
-
-          styles [
-            "dim-label",
-            "caption",
-          ]
-        }
-      }
-
-      Label progress_percentage {
-        halign: end;
-        valign: center;
-        label: "0%";
+      Label progressbar_text {
+        wrap: true;
+        wrap-mode: word_char;
+        justify: center;
+        label: _("Installing");
 
         styles [
-          "title-3",
+          "title-1",
         ]
       }
-    }
 
-    Box {
-      orientation: horizontal;
-      spacing: 12;
-      margin-top: 4;
-
-      Label progress_elapsed {
-        xalign: 0;
-        halign: start;
-        label: _("0:00 elapsed");
+      Label progress_substep {
+        wrap: true;
+        wrap-mode: word_char;
+        justify: center;
+        label: "";
 
         styles [
           "dim-label",
-          "caption",
         ]
       }
 
-      Label progress_eta {
-        xalign: 0;
-        halign: start;
+      ProgressBar progressbar {
+        show-text: false;
+        margin-top: 18;
+
+        styles [
+          "thick-progress",
+        ]
+      }
+
+      Box {
+        orientation: horizontal;
+        spacing: 12;
+        margin-top: 2;
+
+        Label progress_elapsed {
+          xalign: 0;
+          label: _("0:00 elapsed");
+
+          styles [
+            "dim-label",
+            "caption",
+            "numeric",
+          ]
+        }
+
+        Label progress_eta {
+          xalign: 0;
+          hexpand: true;
+          label: "";
+
+          styles [
+            "dim-label",
+            "caption",
+            "numeric",
+          ]
+        }
+
+        Label progress_percentage {
+          halign: end;
+          label: "0%";
+
+          styles [
+            "heading",
+            "numeric",
+          ]
+        }
+      }
+
+      // progress_note from the branding contract, set by views/progress.py.
+      Label progress_note {
+        wrap: true;
+        wrap-mode: word_char;
+        justify: center;
+        margin-top: 12;
         label: "";
 
         styles [
@@ -260,55 +269,41 @@ template $BootcProgress: Box {
       }
 
       Box {
-        halign: fill;
-        hexpand: true;
+        orientation: horizontal;
+        halign: center;
+        spacing: 12;
+        margin-top: 12;
+
+        Button copy_log_button {
+          visible: true;
+          icon-name: "edit-copy-symbolic";
+          tooltip-text: _("Copy Console Log");
+
+          styles [
+            "circular",
+          ]
+        }
+
+        Button console_button {
+          visible: true;
+          icon-name: "media-view-subtitles-symbolic";
+          tooltip-text: _("Show Console Output");
+
+          styles [
+            "circular",
+          ]
+        }
+
+        Button media_button {
+          visible: false;
+          icon-name: "media-playback-start-symbolic";
+          tooltip-text: _("Show Installation Media");
+
+          styles [
+            "circular",
+          ]
+        }
       }
-
-      Button copy_log_button {
-        visible: true;
-        icon-name: "edit-copy-symbolic";
-        halign: end;
-        valign: center;
-        tooltip-text: _("Copy Console Log");
-
-        styles [
-          "circular",
-        ]
-      }
-
-      Button console_button {
-        visible: true;
-        icon-name: "media-view-subtitles-symbolic";
-        halign: end;
-        valign: center;
-        tooltip-text: _("Show Console Output");
-
-        styles [
-          "circular",
-        ]
-      }
-
-      Button media_button {
-        visible: false;
-        icon-name: "media-playback-start-symbolic";
-        halign: end;
-        valign: center;
-        tooltip-text: _("Show Installation Media");
-
-        styles [
-          "circular",
-        ]
-      }
-    }
-
-    ProgressBar progressbar {
-      show-text: false;
-      margin-top: 12;
-      margin-bottom: 40;
-
-      styles [
-        "thick-progress",
-      ]
     }
   }
 }

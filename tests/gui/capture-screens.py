@@ -326,9 +326,34 @@ def _seed_progress(page):
         SEED_FAILURES.append("progress: the progress bar is not visible")
 
 
+def _choose_disk(win):
+    """Choose the fixture's first disk on the disk page, as a user does
+    before Next, so the confirm page summarises a real choice.
+
+    Without this the capture reached the confirm page with no disk chosen:
+    the summary had no Target disk, Filesystem or erase warning, and the
+    screenshot showed less than any other frontend's (docs/DESIGN-AUDIT.md).
+    Only the partition recipe is set -- the "Use Entire Disk" button also
+    opens a confirmation dialog, which has no place in a page render.
+    """
+    carousel = win.carousel
+    for index in range(carousel.get_n_pages()):
+        page = carousel.get_nth_page(index)
+        if getattr(page, "_bootc_step_key", None) != "disk":
+            continue
+        disks = page._BootcDefaultDisk__disks.all_disks()
+        if not disks:
+            SEED_FAILURES.append("confirm: the disk page has no disks to choose")
+            return
+        page._set_auto_partition_recipe(disks[0])
+        return
+    SEED_FAILURES.append("confirm: no disk page in the carousel")
+
+
 def _seed(win, page, name):
     """Put each page into the state a user would see it in."""
     if name == "confirm":
+        _choose_disk(win)
         win.update_finals()
     elif name == "progress":
         _seed_progress(page)

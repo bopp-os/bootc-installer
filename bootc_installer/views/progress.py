@@ -185,6 +185,7 @@ class BootcProgress(Gtk.Box):
     console_box = Gtk.Template.Child()
     log_view = Gtk.Template.Child()
     copy_log_button = Gtk.Template.Child()
+    status_clamp = Gtk.Template.Child()
 
     def __init__(self, window, **kwargs):
         super().__init__(**kwargs)
@@ -360,11 +361,19 @@ class BootcProgress(Gtk.Box):
     def __hide_video_fallback(self):
         self.video_fallback_box.set_visible(False)
 
+    def __sync_status_layout(self):
+        """Centre the status in the page when no pane is open; with the
+        video or the log open, let the pane take the height and keep the
+        status under it at its natural size."""
+        pane_open = self.media_box.get_visible() or self.console_box.get_visible()
+        self.status_clamp.set_vexpand(not pane_open)
+
     def __show_selected_media_view(self):
         self.console_box.set_visible(False)
         self.media_button.set_visible(False)
         self.console_button.set_visible(True)
         self.media_box.set_visible(True)
+        self.__sync_status_layout()
         self.__play_install_video()
 
     def __show_media_view(self):
@@ -375,6 +384,7 @@ class BootcProgress(Gtk.Box):
         self.console_box.set_visible(True)
         self.media_button.set_visible(True)
         self.console_button.set_visible(False)
+        self.__sync_status_layout()
         self.__pause_install_video()
 
     def __on_console_button(self, *args):

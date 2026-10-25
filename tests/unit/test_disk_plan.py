@@ -11,13 +11,15 @@ from bootc_installer.defaults.disk_plan import (
 
 class TestDiskPlan(unittest.TestCase):
     def test_build_auto_partition_recipe_copies_disk_contract(self):
-        disk = SimpleNamespace(disk="/dev/nvme0n1", pretty_size="500 GB", size=500)
+        disk = SimpleNamespace(disk="/dev/nvme0n1", pretty_size="500 GB", size=500,
+                               model="Samsung SSD 980 PRO")
 
         self.assertEqual(build_auto_partition_recipe(disk), {
             "auto": {
                 "disk": "/dev/nvme0n1",
                 "pretty_size": "500 GB",
                 "size": 500,
+                "model": "Samsung SSD 980 PRO",
                 "vgs_to_remove": [],
                 "pvs_to_remove": [],
             }

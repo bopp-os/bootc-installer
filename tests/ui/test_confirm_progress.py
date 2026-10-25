@@ -63,7 +63,9 @@ class TestConfirmScreen:
             {"keyboard": [{"layout": "us", "variant": ""}, {"layout": "br", "variant": "abnt2"}]},
             {"timezone": {"region": "America", "zone": "Sao_Paulo"}},
             {"users": {"username": "jorge", "fullname": "Jorge Castro"}},
-            {"disk": {"auto": {"disk": "/dev/nvme0n1", "pretty_size": "1 TB"}}},
+            {"disk": {"auto": {"disk": "/dev/nvme0n1", "pretty_size": "1 TB",
+                               "model": "WD_BLACK SN850X"},
+                      "filesystem": "btrfs"}},
             {"encryption": {"type": "tpm2-luks-passphrase"}},
             {"hostname": "legendary-box"},
             {"selected_image": "ghcr.io/example/marlin:latest", "pretty_name": "Marlin GTS"},
@@ -88,16 +90,38 @@ class TestConfirmScreen:
         assert ("Keyboard 2", "br+abnt2") in rows
         assert ("Timezone", "America Sao_Paulo") in rows
         assert ("Users", "jorge (Jorge Castro)") in rows
-        assert ("Disk", "/dev/nvme0n1 (1 TB)") in rows
+        # The model names the physical disk, the path says which device.
+        assert ("Target disk", "WD_BLACK SN850X (/dev/nvme0n1, 1 TB)") in rows
+        assert ("Filesystem", "Btrfs") in rows
         # The shared copy key, the same words the other four frontends use.
         assert ("Encryption", "TPM + passphrase") in rows
         assert ("Hostname", "legendary-box") in rows  # EntryRow, text via get_text
         assert ("Image", "Marlin GTS") in rows
         assert ("Graphics", "AMD Radeon") in rows
+        # The facts every frontend's summary leads with come first, in the
+        # order KDE, COSMIC and Niri list them; GNOME's extra steps follow.
+        # (The untitled row after Hostname is its validation message.)
+        titles = [widget.get_title() for widget in confirm.active_widgets]
+        assert titles[:6] == ["Target disk", "Filesystem", "Encryption",
+                              "Hostname", "", "Image"]
         # The erase warning is the branding contract's confirm_warning with
-        # the chosen disk filled in, not a hardcoded GNOME string.
-        titles = {widget.get_title() for widget in confirm.active_widgets}
-        assert "Everything on /dev/nvme0n1 will be erased. This cannot be undone." in titles
+        # the chosen disk filled in, not a hardcoded GNOME string, in a row
+        # of its own above the summary.
+        assert confirm.group_warning.get_visible()
+        assert confirm.row_warning.get_title() == \
+            "Everything on /dev/nvme0n1 will be erased. This cannot be undone."
+
+    def test_no_disk_no_warning_and_recipe_image(self):
+        """No whole-disk erase, no warning; no image step, the recipe's image."""
+        window = _branded_window()
+        window.recipe["imgref"] = "registry.example/os:stable"
+        confirm = BootcConfirm(window)
+        with patch("bootc_installer.core.system.Systeminfo.gpu_display_string", return_value=""):
+            confirm.update([{"hostname": "box"}])
+        assert not confirm.group_warning.get_visible()
+        rows = {(w.get_title(), w.get_subtitle()) for w in confirm.active_widgets
+                if hasattr(w, "get_subtitle")}
+        assert ("Image", "registry.example/os:stable") in rows
 
     def test_confirm_button_emits_signal_once_and_uses_confirm_subtitle(self):
         confirm = BootcConfirm(_branded_window())
@@ -137,8 +161,11 @@ class TestProgressScreen:
     def test_media_and_console_toggles_preserve_selected_media_mode(self):
         progress, _window = self._make_progress()
 
+        # Nothing plays before the install starts, so no pane is open and
+        # the status is centred in the page instead of pushed to the bottom.
         assert not progress.console_box.get_visible()
-        assert progress.media_box.get_visible()
+        assert not progress.media_box.get_visible()
+        assert progress.status_clamp.get_vexpand()
 
         progress.console_button.emit("clicked")
         _pump()
@@ -146,6 +173,8 @@ class TestProgressScreen:
         assert progress.media_button.get_visible()
         assert not progress.console_button.get_visible()
         assert not progress.media_box.get_visible()
+        # The log takes the height; the status sits under it.
+        assert not progress.status_clamp.get_vexpand()
 
         progress.media_button.emit("clicked")
         _pump()
@@ -153,6 +182,7 @@ class TestProgressScreen:
         assert not progress.media_button.get_visible()
         assert progress.console_button.get_visible()
         assert progress.media_box.get_visible()
+        assert not progress.status_clamp.get_vexpand()
 
     def test_progress_events_update_labels_percentage_eta_and_completion(self):
         progress, _window = self._make_progress()

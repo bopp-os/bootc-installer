@@ -146,6 +146,32 @@ class TestProcessKeyboards(unittest.TestCase):
         self.assertEqual(len(obj.active_widgets), 0)
 
 
+class TestSummaryHelpers(unittest.TestCase):
+    def test_disk_summary_names_model_path_and_size(self):
+        self.assertEqual(
+            confirm_mod.disk_summary(
+                {"disk": "/dev/sda", "pretty_size": "500 GB", "model": "Samsung SSD"}),
+            "Samsung SSD (/dev/sda, 500 GB)")
+
+    def test_disk_summary_without_model_shows_path(self):
+        self.assertEqual(
+            confirm_mod.disk_summary({"disk": "/dev/vda", "pretty_size": "20 GB"}),
+            "/dev/vda (20 GB)")
+        self.assertEqual(confirm_mod.disk_summary({"disk": "/dev/vda"}), "/dev/vda")
+
+    def test_filesystem_label(self):
+        self.assertEqual(confirm_mod.filesystem_label("xfs"), "XFS")
+        self.assertEqual(confirm_mod.filesystem_label("btrfs"), "Btrfs")
+        self.assertEqual(confirm_mod.filesystem_label("f2fs"), "f2fs")
+
+    def test_recipe_image_follows_processor_order(self):
+        self.assertEqual(confirm_mod.recipe_image({"imgref": "a", "images": [{"imgref": "b"}]}), "a")
+        self.assertEqual(confirm_mod.recipe_image(
+            {"images": [{"imgref": "b"}, {"imgref": "c", "default": True}]}), "c")
+        self.assertEqual(confirm_mod.recipe_image({"images": [{"imgref": "b"}]}), "b")
+        self.assertEqual(confirm_mod.recipe_image({}), "")
+
+
 def _set_window(obj, recipe):
     """Give a __new__-built view the window update() reads the branding from.
     Set in the instance dict so it shadows whatever the GTK stubs put on the

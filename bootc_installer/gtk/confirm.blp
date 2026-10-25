@@ -22,7 +22,30 @@ template $BootcConfirm: Adw.Bin {
         }
       }
 
-      Adw.PreferencesGroup group_changes {}
+      // The erase warning: confirm_warning from the branding contract with
+      // the chosen disk filled in, set by views/confirm.py. Hidden when the
+      // install erases no whole disk.
+      Adw.PreferencesGroup group_warning {
+        visible: false;
+
+        Adw.ActionRow row_warning {
+          use-markup: false;
+          title-lines: 0;
+
+          [prefix]
+          Image {
+            icon-name: "dialog-warning-symbolic";
+          }
+
+          styles [
+            "error",
+          ]
+        }
+      }
+
+      Adw.PreferencesGroup group_changes {
+        title: _("Summary");
+      }
 
       Adw.PreferencesGroup {
         Box {

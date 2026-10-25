@@ -168,7 +168,7 @@ class TestDemoEndToEnd:
                 row.get_title()
                 for row in _view(window, "confirm").active_widgets
             }
-            assert "Disk" in titles
+            assert "Target disk" in titles
             assert "Encryption" in titles
         finally:
             window.destroy()

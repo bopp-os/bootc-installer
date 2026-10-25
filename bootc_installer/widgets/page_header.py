@@ -16,6 +16,8 @@ class BootcPageHeader(Gtk.Box):
     @icon_name.setter
     def icon_name(self, value):
         self._icon.set_from_icon_name(value)
+        # An empty icon would still reserve its 128 px above the title.
+        self._icon.set_visible(bool(value))
 
     @GObject.Property(type=str, default="")
     def title(self):
@@ -36,12 +38,16 @@ class BootcPageHeader(Gtk.Box):
 
     def set_paintable(self, paintable):
         self._icon.set_paintable(paintable)
+        self._icon.set_visible(True)
 
     def set_from_file(self, filename):
         self._icon.set_from_file(filename)
+        self._icon.set_visible(True)
 
     def set_from_icon_name(self, icon_name):
         self._icon.set_from_icon_name(icon_name)
+        self._icon.set_visible(True)
 
     def set_from_resource(self, resource_path):
         self._icon.set_from_resource(resource_path)
+        self._icon.set_visible(True)

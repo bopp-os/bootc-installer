@@ -5,7 +5,9 @@ template $BootcPageHeader: Gtk.Box {
   spacing: 18;
   halign: center;
 
+  // Hidden until a page sets an icon (widgets/page_header.py).
   Image _icon {
+    visible: false;
     pixel-size: 128;
   }
 
