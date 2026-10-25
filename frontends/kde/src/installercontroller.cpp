@@ -34,6 +34,10 @@ InstallerController::InstallerController(QObject *parent)
     m_branding = branding::resolve();
     m_productName = m_branding.name;
     m_logoSource = branding::resolveLogo(m_branding.logo, offline::inFlatpak()).source();
+    m_welcomeImageSource = branding::resolveLogo(
+        m_branding.assets.value(QStringLiteral("welcome_image")), offline::inFlatpak()).source();
+    m_completeImageSource = branding::resolveLogo(
+        m_branding.assets.value(QStringLiteral("complete_image")), offline::inFlatpak()).source();
     m_recipe.distroID = m_branding.id;
     m_recipe.hostname = m_branding.defaultHostname;
 

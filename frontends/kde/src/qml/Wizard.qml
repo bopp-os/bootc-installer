@@ -186,21 +186,80 @@ Kirigami.Page {
         }
     }
 
+    // Welcome and done are hero pages that carry their own heading
+    // ("Welcome to <product>", "<product> is installed"); a header title
+    // over them only repeated it. The step indicator still names them.
+    readonly property bool heroStep: currentStepId === "welcome" || currentStepId === "done"
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
+
+        // Step indicator: "Step N of 6 · Name" and one dot per step, the
+        // shared six-step contract as COSMIC's header and Niri's dots show
+        // it. Colours come from Kirigami.Theme, sizes from Kirigami.Units.
+        RowLayout {
+            objectName: "stepIndicator"
+            spacing: Kirigami.Units.largeSpacing
+
+            Layout.fillWidth: true
+            Layout.topMargin: Kirigami.Units.largeSpacing
+            Layout.leftMargin: Kirigami.Units.gridUnit
+            Layout.rightMargin: Kirigami.Units.gridUnit
+
+            Label {
+                objectName: "stepCounter"
+                text: "Step " + (root.currentIndex + 1) + " of " + root.stepCount
+                    + " · " + stepsModel.get(root.currentIndex).name
+                color: Kirigami.Theme.disabledTextColor
+                elide: Text.ElideRight
+
+                Layout.fillWidth: true
+            }
+
+            Row {
+                spacing: Kirigami.Units.smallSpacing
+
+                Accessible.role: Accessible.ProgressBar
+                Accessible.name: "Step " + (root.currentIndex + 1) + " of " + root.stepCount
+
+                Repeater {
+                    model: root.stepCount
+
+                    delegate: Rectangle {
+                        required property int index
+
+                        readonly property bool current: index === root.currentIndex
+
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: current ? Kirigami.Units.gridUnit * 1.5 : Kirigami.Units.smallSpacing * 2
+                        height: Kirigami.Units.smallSpacing * 2
+                        radius: height / 2
+                        color: index <= root.currentIndex
+                            ? Kirigami.Theme.highlightColor
+                            : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g,
+                                      Kirigami.Theme.textColor.b, 0.2)
+
+                        Behavior on width {
+                            NumberAnimation { duration: Kirigami.Units.shortDuration }
+                        }
+                    }
+                }
+            }
+        }
 
         Label {
             id: stepHeading
 
             opacity: 0
+            visible: !root.heroStep
             text: "Welcome"
             horizontalAlignment: Text.AlignHCenter
             elide: Text.ElideRight
             font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.6
 
             Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.gridUnit
+            Layout.topMargin: Kirigami.Units.largeSpacing
             Layout.leftMargin: Kirigami.Units.gridUnit
             Layout.rightMargin: Kirigami.Units.gridUnit
 

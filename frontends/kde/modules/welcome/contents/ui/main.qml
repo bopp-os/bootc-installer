@@ -26,10 +26,18 @@ TunaComponents.SetupModule {
             width: Math.min(root.cardWidth, parent.width)
             spacing: Kirigami.Units.largeSpacing
 
+            // The product's artwork from the branding resolver:
+            // assets.welcome_image, then the logo (a theme icon or a file).
+            // When neither is set or neither resolves, a full-colour themed
+            // installer icon. Not drive-harddisk-symbolic: Breeze draws that
+            // at 32 px at most, and scaled to the hero size it came out as a
+            // grey blob that read as missing artwork.
             Kirigami.Icon {
                 objectName: "welcomeLogo"
-                source: InstallerController.logoSource || "drive-harddisk-symbolic"
-                fallback: "drive-harddisk-symbolic"
+                source: InstallerController.welcomeImageSource
+                    || InstallerController.logoSource
+                    || "system-software-install"
+                fallback: "system-software-install"
                 implicitWidth: Kirigami.Units.iconSizes.enormous
                 implicitHeight: Kirigami.Units.iconSizes.enormous
 
@@ -43,6 +51,7 @@ TunaComponents.SetupModule {
             Kirigami.Heading {
                 text: InstallerController.text("welcome_title")
                 level: 1
+                type: Kirigami.Heading.Type.Primary
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
 

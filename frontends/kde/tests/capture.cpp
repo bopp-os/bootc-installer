@@ -22,6 +22,9 @@
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
+#include <QFont>
+#include <QFontInfo>
+#include <QScreen>
 #include <QImage>
 #include <QMap>
 #include <QMetaMethod>
@@ -510,6 +513,29 @@ int main(int argc, char *argv[])
         QIcon::setThemeName(u"breeze"_s);
     QIcon::setFallbackThemeName(u"breeze"_s);
 
+    // shared/walkthrough/capture-branding.json names its logo as a theme icon
+    // (org.bootcinstaller.Installer). A live image that does that ships the
+    // icon in its theme; this container has only Breeze, so the welcome and
+    // done steps drew the fallback and the docs never showed a logo at all.
+    // Stand in for that host with the repository's copy of the icon. The
+    // branding-check run (Skipjack os-release, no LOGO) still renders the
+    // themed fallback, so both paths stay documented.
+    QIcon::setFallbackSearchPaths(QIcon::fallbackSearchPaths()
+                                  << QStringLiteral(CAPTURE_ICON_DIR));
+
+    // Font. With no platform theme (offscreen, no plasma-integration) Qt
+    // falls back to its generic 9 pt default, and every Kirigami.Units
+    // metric is derived from that font. A Plasma session's default is
+    // Noto Sans 10 pt (kdeglobals), so the walkthrough rendered text ~10%
+    // smaller than any user sees it, with the spacings shrunk to match.
+    // The app itself takes its font from the platform theme and is left
+    // alone; this only puts the harness on Plasma's default.
+    {
+        QFont plasmaDefault(u"Noto Sans"_s);
+        plasmaDefault.setPointSizeF(10);
+        QApplication::setFont(plasmaDefault);
+    }
+
     // Probe a name Breeze actually defines. The first version asked for
     // "drive-harddisk-symbolic" and reported "no" on a run whose icons all drew
     // fine: Breeze ships no -symbolic alias for its device icons, and
@@ -547,6 +573,12 @@ int main(int argc, char *argv[])
     // container's own PRETTY_NAME, which is the only thing in the run that
     // exercises the file-reading path rather than the env override.
     out << "product name from branding: " << branding::resolve().name << "\n";
+    {
+        const QFont f = QApplication::font();
+        out << "font: " << QFontInfo(f).family() << " " << f.pointSizeF() << " pt = "
+            << QFontInfo(f).pixelSize() << " px at "
+            << QGuiApplication::primaryScreen()->logicalDotsPerInch() << " dpi\n";
+    }
 
     // NOTE: the harness deliberately does NOT force a product name of its own.
     // The first version defaulted it to "TunaOS" here, which silently overrode
@@ -748,6 +780,25 @@ int main(int argc, char *argv[])
             if (restart->property("enabled").toBool()) {
                 out << "FAIL: Restart is live before the recovery key was "
                        "acknowledged (#129)\n";
+                return 1;
+            }
+            // And the other half: the acknowledgement must release it. A
+            // binding that never re-enables Restart would strand the user on
+            // a finished install. Toggled through the controller and back, so
+            // the frame captured below is still the unacknowledged state.
+            controller->setRecoveryAck(true);
+            settle(50);
+            const bool releasedByAck = restart->property("enabled").toBool();
+            controller->setRecoveryAck(false);
+            settle(50);
+            if (!releasedByAck) {
+                out << "FAIL: acknowledging the recovery key did not enable Restart\n";
+                return 1;
+            }
+            // The key must be in a selectable field, not a bare label.
+            QQuickItem *keyField = findItemByName(window->contentItem(), u"recoveryKeyLabel"_s);
+            if (!keyField || !keyField->property("selectByMouse").toBool()) {
+                out << "FAIL: the recovery key is not in a selectable field\n";
                 return 1;
             }
         }

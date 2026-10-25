@@ -75,6 +75,12 @@ class InstallerController : public QObject
     // Theme icon name or safely encoded local URL, using the host path only
     // when sandboxed. Welcome and successful completion share this source.
     Q_PROPERTY(QString logoSource READ logoSource CONSTANT)
+    // The branding contract's optional artwork (`assets.welcome_image`,
+    // `assets.complete_image`), resolved with the same rules as the logo.
+    // Empty when unset; the welcome and done steps then fall back to
+    // logoSource and finally to a themed icon.
+    Q_PROPERTY(QString welcomeImageSource READ welcomeImageSource CONSTANT)
+    Q_PROPERTY(QString completeImageSource READ completeImageSource CONSTANT)
     // Flavour text from the branding contract (shared/branding copy keys),
     // {name} already filled in; {disk} through text(). CONSTANT like the name.
     Q_PROPERTY(QVariantMap copy READ copy CONSTANT)
@@ -151,6 +157,8 @@ public:
     void applyValidateAnswer(const QByteArray &stdoutData);
     QString productName() const { return m_productName; }
     QString logoSource() const { return m_logoSource; }
+    QString welcomeImageSource() const { return m_welcomeImageSource; }
+    QString completeImageSource() const { return m_completeImageSource; }
     QVariantMap copy() const { return m_branding.copyAsVariantMap(); }
     QString storeUrl() const { return m_branding.storeUrl; }
     // A copy line with {name} and {disk} filled in.
@@ -267,6 +275,8 @@ private:
     QStringList m_unmet;
     QString m_productName;
     QString m_logoSource;
+    QString m_welcomeImageSource;
+    QString m_completeImageSource;
     branding::Branding m_branding;
     int m_exitCode = 0;
 };

@@ -122,7 +122,10 @@ if(BUILD_CAPTURE)
     # The machine the disk step photographs: fisherman's probe answer for a
     # laptop, the fixture every frontend's capture reads.
     target_compile_definitions(tuna-installer-capture PRIVATE
-        PROBE_FIXTURE_FILE="${CMAKE_CURRENT_SOURCE_DIR}/../../shared/probe/fixtures/laptop.json")
+        PROBE_FIXTURE_FILE="${CMAKE_CURRENT_SOURCE_DIR}/../../shared/probe/fixtures/laptop.json"
+        # The themed logo shared/walkthrough/capture-branding.json names; see
+        # the icon search path in tests/capture.cpp.
+        CAPTURE_ICON_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../data/icons/hicolor/scalable/apps")
 endif()
 
 option(BUILD_E2E "Build the end-to-end driver that launches the real backend path" OFF)

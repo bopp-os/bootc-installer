@@ -69,8 +69,8 @@ claimed a render that nobody had wired up.
 | `done_failed_title` | page header | heading | title2 | heading | headline |
 | `validate_*` | error line under the hostname (disk and confirm pages) and the username | inline message on the encryption step (passphrase) and the confirm step (hostname) | hostname row description; encryption row description | line under the hostname (confirm) and under the passphrase | line under the hostname, the username and the encryption choice |
 | `store_label` | done page link to `store_url` (+ QR from `assets.store_qr`, US locale) | done page link | done page link | done page link | done page link |
-| `logo` | product icon (GNOME file adapter tracked separately) | theme/file on welcome and successful done | theme/file on welcome and successful done | theme/file on welcome and successful done | theme/file/resource on welcome and successful done |
-| `assets.welcome_image`, `assets.complete_image` | tour pages | no | no | welcome logo disc (`logo`) | no |
+| `logo` | product icon (GNOME file adapter tracked separately) | theme/file on welcome and successful done, after the asset; else `system-software-install` / `checkmark` | theme/file on welcome and successful done, after the asset; else `computer-symbolic` in an accent disc / the check | theme/file on welcome and successful done | theme/file/resource on welcome and successful done |
+| `assets.welcome_image`, `assets.complete_image` | tour pages | welcome / successful done artwork, before `logo` | welcome / successful done artwork, before `logo` | welcome logo disc (`logo`) | no |
 
 The eight `encryption_*` keys name the four types of encryption in the
 recipe. The order of the types is the `encryption.type` enum in
@@ -133,6 +133,7 @@ All five render the identity keys (`name`, `id`, `default_hostname`,
 | RAM / CPU / UEFI check (fisherman's `system.unmet`) | blocks (gate window) | warns on welcome | warns on welcome | warns on welcome | warns on welcome |
 | Filesystem choice | yes | no (xfs, shown on confirm) | yes | no (xfs) | yes (Advanced) |
 | Encryption: none / passphrase | yes | yes | yes | yes | yes |
+| Passphrase typed twice, Next held on a mismatch | yes | yes | yes | yes | yes |
 | Encryption: TPM / TPM + passphrase | yes | yes | yes | yes | yes |
 | Recovery key page after TPM enrolment | yes | yes | yes | yes | yes |
 | Hostname | generated, editable on confirm | no (branding default, shown on confirm) | field | field on confirm | field |
@@ -143,6 +144,7 @@ All five render the identity keys (`name`, `id`, `default_hostname`,
 | Progress bar from fisherman's protocol | yes | yes | yes | yes | yes |
 | Restart from the done page | yes | yes | yes | yes | yes |
 | Show log after failure | yes | log path | log in page | log in page | log tail |
+| Step indicator for the six-step contract | page header | "Step N of 6 · name" + dots | "Step N of 6 · name" + bar | "Step N of 6 · name" + dots | page title |
 | Screenshot walkthrough + parity report | yes | yes | yes | yes | yes |
 | End-to-end gate (real install and boot) | yes | yes | yes | yes | yes |
 
@@ -167,9 +169,10 @@ All five render the identity keys (`name`, `id`, `default_hostname`,
    key (#129).
 4. **User account** (KDE, COSMIC, Niri): a username, full name and
    password step that writes the recipe's `user` block, as XFCE does.
-5. **Store and tour assets** (all four): only worth it where the desktop
-   has a place for artwork. Every resolver already resolves the keys, so
-   this is view work only.
+5. **Store and tour assets**: only worth it where the desktop has a place
+   for artwork. Every resolver already resolves the keys, so this is view
+   work only. KDE and COSMIC now show `welcome_image` and
+   `complete_image` as the welcome and done artwork, ahead of `logo`.
 6. **Companion, slurp, locale steps**: GNOME-only by design for now. The
    contract keeps their copy keys out of `copy-defaults.json`, so nothing
    else pretends to have them.

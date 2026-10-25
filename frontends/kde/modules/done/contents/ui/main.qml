@@ -5,6 +5,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 import org.kde.kirigami as Kirigami
+import org.kde.kirigamiaddons.formcard as FormCard
 
 import org.tunaos.installer
 import org.tunaos.installer.components as TunaComponents
@@ -13,6 +14,12 @@ TunaComponents.SetupModule {
     id: root
 
     nextEnabled: true
+
+    // A recovery key takes the room the hero icon would have; the icon
+    // shrinks so the key, its copy button and the acknowledgement fit the
+    // page without scrolling.
+    readonly property bool showRecovery: InstallerController.succeeded
+        && InstallerController.recoveryKey.length > 0
 
     // A plain Item, not a ScrollView. These two steps are short enough never to
     // scroll, and inside a ScrollView the content item collapses to its
@@ -26,24 +33,33 @@ TunaComponents.SetupModule {
             width: Math.min(root.cardWidth, parent.width)
             spacing: Kirigami.Units.largeSpacing
 
+            // Success shows the product's artwork from the branding resolver
+            // (assets.complete_image, then the logo) with a themed check as
+            // the fallback; a failure keeps the error icon.
             Kirigami.Icon {
                 objectName: "doneLogo"
                 source: InstallerController.succeeded
-                    ? (InstallerController.logoSource || "checkmark")
+                    ? (InstallerController.completeImageSource
+                       || InstallerController.logoSource
+                       || "checkmark")
                     : "dialog-error"
                 fallback: InstallerController.succeeded ? "checkmark" : "dialog-error"
-                implicitWidth: Kirigami.Units.iconSizes.enormous
-                implicitHeight: Kirigami.Units.iconSizes.enormous
+                implicitWidth: root.showRecovery ? Kirigami.Units.iconSizes.huge
+                                                 : Kirigami.Units.iconSizes.enormous
+                implicitHeight: implicitWidth
 
                 Layout.alignment: Qt.AlignHCenter
-                Layout.bottomMargin: Kirigami.Units.gridUnit
+                Layout.bottomMargin: Kirigami.Units.largeSpacing
             }
 
+            // "<product> is installed": the one heading on this page. The
+            // header shows only the step indicator here (Wizard.heroStep).
             Kirigami.Heading {
                 text: InstallerController.succeeded
                     ? InstallerController.text("done_title")
                     : InstallerController.text("done_failed_title")
                 level: 1
+                type: Kirigami.Heading.Type.Primary
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
 
@@ -83,55 +99,80 @@ TunaComponents.SetupModule {
             //
             // A panel rather than a dialog, as on the other frontends: a
             // dialog is dismissed and then the key is gone, while this stays
-            // on screen for as long as it takes to write down.
+            // on screen for as long as it takes to write down. A FormCard, the
+            // way Plasma System Settings groups a value with its actions: the
+            // explanation, the key in a monospace, selectable field beside its
+            // copy button, then the acknowledgement that releases Restart.
             ColumnLayout {
                 objectName: "recoveryPanel"
-                visible: InstallerController.succeeded
-                    && InstallerController.recoveryKey.length > 0
-                spacing: Kirigami.Units.smallSpacing
+                visible: root.showRecovery
+                spacing: 0
 
                 Layout.fillWidth: true
-                Layout.topMargin: Kirigami.Units.largeSpacing
 
-                Kirigami.Heading {
-                    text: InstallerController.text("recovery_key_title")
-                    level: 3
-                    horizontalAlignment: Text.AlignHCenter
-                    wrapMode: Text.Wrap
-                    Layout.fillWidth: true
+                FormCard.FormHeader {
+                    title: InstallerController.text("recovery_key_title")
+                    maximumWidth: root.cardWidth
                 }
-                Label {
-                    text: InstallerController.text("recovery_key_body")
-                    horizontalAlignment: Text.AlignHCenter
-                    wrapMode: Text.Wrap
-                    Layout.fillWidth: true
-                }
-                Label {
-                    objectName: "recoveryKeyLabel"
-                    text: InstallerController.recoveryKey
-                    font.family: "monospace"
-                    horizontalAlignment: Text.AlignHCenter
-                    wrapMode: Text.WrapAnywhere
-                    Layout.fillWidth: true
-                }
-                RowLayout {
-                    Layout.alignment: Qt.AlignHCenter
-                    spacing: Kirigami.Units.smallSpacing
 
-                    Button {
-                        text: InstallerController.text("recovery_key_copy")
-                        icon.name: "edit-copy-symbolic"
-                        onClicked: recoveryClip.selectAll(),
-                                   recoveryClip.copy(),
-                                   recoveryClip.deselect()
+                FormCard.FormCard {
+                    maximumWidth: root.cardWidth
+
+                    FormCard.FormTextDelegate {
+                        text: InstallerController.text("recovery_key_body")
+                        textItem.wrapMode: Text.Wrap
                     }
-                    CheckBox {
+
+                    FormCard.FormDelegateSeparator {}
+
+                    FormCard.AbstractFormDelegate {
+                        background: null
+                        focusPolicy: Qt.NoFocus
+
+                        contentItem: RowLayout {
+                            spacing: Kirigami.Units.smallSpacing
+
+                            TextField {
+                                objectName: "recoveryKeyLabel"
+                                text: InstallerController.recoveryKey
+                                readOnly: true
+                                selectByMouse: true
+                                font.family: Kirigami.Theme.fixedWidthFont.family
+                                font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.15
+                                horizontalAlignment: Text.AlignHCenter
+                                Accessible.name: InstallerController.text("recovery_key_title")
+
+                                Layout.fillWidth: true
+                            }
+
+                            // Icon-only so the field keeps the width the
+                            // whole key needs; the copy key is the tooltip
+                            // and the accessible name.
+                            Button {
+                                objectName: "recoveryCopyButton"
+                                text: InstallerController.text("recovery_key_copy")
+                                icon.name: "edit-copy-symbolic"
+                                display: AbstractButton.IconOnly
+                                ToolTip.text: text
+                                ToolTip.visible: hovered
+                                ToolTip.delay: Kirigami.Units.toolTipDelay
+                                onClicked: recoveryClip.selectAll(),
+                                           recoveryClip.copy(),
+                                           recoveryClip.deselect()
+                            }
+                        }
+                    }
+
+                    FormCard.FormDelegateSeparator {}
+
+                    FormCard.FormCheckDelegate {
                         objectName: "recoveryAckCheck"
                         text: InstallerController.text("recovery_key_ack")
                         checked: InstallerController.recoveryAck
                         onToggled: InstallerController.recoveryAck = checked
                     }
                 }
+
                 // QtQuick has no clipboard object; a hidden TextEdit is the
                 // standard way to reach one.
                 TextEdit {

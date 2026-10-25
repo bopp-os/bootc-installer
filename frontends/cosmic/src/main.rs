@@ -38,6 +38,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let flags = Flags {
         capture: capture::Capture::from_env(),
     };
+    if flags.capture.is_some() {
+        // Before the first icon lookup, and before any other thread.
+        capture::stage_repo_icons();
+    }
 
     let mut settings = Settings::default()
         // COSMIC ships its own icon theme, but the installer also runs on live
@@ -166,6 +170,8 @@ pub enum Message {
     FilesystemChanged(usize),
     EncryptionChanged(usize),
     PassphraseChanged(String),
+    /// The options page's "Confirm passphrase" field.
+    PassphraseConfirmChanged(String),
     TogglePassphraseVisible,
     /// The done page's "I have saved my recovery key" box.
     RecoveryAckToggled(bool),
@@ -191,6 +197,13 @@ pub enum Message {
     Capture(capture::Message),
 }
 
+/// The options page's own rule: a needs_passphrase choice holds Continue
+/// until the passphrase was typed the same twice. Other choices carry no
+/// passphrase, so there is nothing to confirm.
+fn passphrase_confirmed(enc_type: &str, passphrase: &str, confirm: &str) -> bool {
+    !validate::needs_passphrase(enc_type) || passphrase == confirm
+}
+
 pub struct TunaInstaller {
     core: Core,
     page: Page,
@@ -213,6 +226,10 @@ pub struct TunaInstaller {
     install_ok: bool,
     installing: bool,
     passphrase_hidden: bool,
+    /// The passphrase typed a second time. Never in the recipe and never
+    /// sent to fisherman: matching it is this frontend's only rule
+    /// (shared/recipe/README.md), as on KDE and Niri.
+    passphrase_confirm: String,
     /// Ticked by the user on the done page once they have written the
     /// recovery key down. It gates Restart (#129).
     recovery_ack: bool,
@@ -274,6 +291,17 @@ impl TunaInstaller {
     }
     pub fn passphrase_hidden(&self) -> bool {
         self.passphrase_hidden
+    }
+    pub fn passphrase_confirm(&self) -> &str {
+        &self.passphrase_confirm
+    }
+    /// The confirmation matches, or the choice takes no passphrase.
+    pub fn passphrases_match(&self) -> bool {
+        passphrase_confirmed(
+            &self.recipe.encryption.enc_type,
+            &self.recipe.encryption.passphrase,
+            &self.passphrase_confirm,
+        )
     }
     pub fn capturing(&self) -> bool {
         self.capture.is_some()
@@ -349,6 +377,14 @@ impl TunaInstaller {
     /// the install runs the same rules before it touches a disk.
     pub fn encryption_ok(&self) -> bool {
         self.problems.is_empty()
+    }
+
+    /// Whether Continue is live on the Options page: fisherman's rules
+    /// (`encryption_ok`) and the passphrase confirmation, the one rule of
+    /// this frontend. A mismatch is caught here, while it can be fixed,
+    /// not at the first boot.
+    pub fn options_ok(&self) -> bool {
+        self.encryption_ok() && self.passphrases_match()
     }
 
     /// Asks fisherman about the options page after a pause in the typing,
@@ -438,6 +474,7 @@ impl cosmic::Application for TunaInstaller {
             install_ok: false,
             installing: false,
             passphrase_hidden: true,
+            passphrase_confirm: String::new(),
             recovery_ack: false,
             // Until the probe answers: no TPM choices, no warning.
             has_tpm: false,
@@ -559,6 +596,7 @@ impl cosmic::Application for TunaInstaller {
                     // previous choice can't linger into the recipe.
                     if !validate::needs_passphrase(choice) {
                         self.recipe.encryption.passphrase.clear();
+                        self.passphrase_confirm.clear();
                     }
                 }
                 self.check_fields()
@@ -566,6 +604,11 @@ impl cosmic::Application for TunaInstaller {
             Message::PassphraseChanged(p) => {
                 self.recipe.encryption.passphrase = p;
                 self.check_fields()
+            }
+            Message::PassphraseConfirmChanged(p) => {
+                // Not a field fisherman checks, so no validate round-trip.
+                self.passphrase_confirm = p;
+                Task::none()
             }
             Message::TogglePassphraseVisible => {
                 self.passphrase_hidden = !self.passphrase_hidden;
@@ -822,6 +865,20 @@ mod tests {
         assert!(json.get("image").is_none());
         assert!(json.get("targetImgref").is_none());
         assert!(json.get("bootloader").is_none());
+    }
+
+    #[test]
+    fn a_passphrase_choice_needs_the_passphrase_twice() {
+        use super::passphrase_confirmed;
+        for t in ["luks-passphrase", "tpm2-luks-passphrase"] {
+            assert!(passphrase_confirmed(t, "s3cret", "s3cret"), "{t}");
+            assert!(!passphrase_confirmed(t, "s3cret", "s3cre"), "{t}");
+            assert!(!passphrase_confirmed(t, "s3cret", ""), "{t}");
+        }
+        // No passphrase to confirm: never held by the confirmation.
+        for t in ["", "none", "tpm2-luks"] {
+            assert!(passphrase_confirmed(t, "", "leftover"), "{t}");
+        }
     }
 
     #[test]

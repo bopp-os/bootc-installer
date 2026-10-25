@@ -38,6 +38,9 @@ defaults are already right for nearly everyone. The passphrase field does not
 exist at all until you pick an encryption mode that needs one — the KDE sibling
 crashed on exactly this relationship by wiring the toggle up before the
 passphrase widgets existed.
+Such a mode adds two fields, **Passphrase** and **Confirm passphrase**; a
+mismatch shows under the second and holds **Continue**. The capture renders
+this state.
 
 ## 4. Confirm
 

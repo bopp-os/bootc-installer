@@ -48,6 +48,51 @@ const SETTLE_MS: u64 = 700;
 pub const FIXTURE_PROBE: &str =
     concat!(env!("CARGO_MANIFEST_DIR"), "/../../shared/probe/fixtures/laptop.json");
 
+/// The repository's own app icons (data/icons/hicolor/scalable/apps).
+/// `shared/walkthrough/capture-branding.json` names its logo as a theme icon
+/// from there; see [`stage_repo_icons`].
+const REPO_ICON_DIR: &str =
+    concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/icons/hicolor/scalable/apps");
+
+/// The smallest hicolor index that makes `scalable/apps` searchable.
+const STAGED_INDEX_THEME: &str = "[Icon Theme]\nName=Hicolor\nDirectories=scalable/apps\n\n\
+     [scalable/apps]\nSize=128\nMinSize=8\nMaxSize=512\nType=Scalable\nContext=Applications\n";
+
+/// Make the capture branding's themed logo resolvable, before anything looks
+/// up an icon (freedesktop-icons reads `XDG_DATA_DIRS` once).
+///
+/// A live image whose branding names a theme icon ships that icon in its
+/// theme. The CI runner has only Adwaita, so the welcome and done pages drew
+/// the fallback and the documentation never showed a logo. This stages the
+/// repository's copies in a private hicolor directory and puts it first on
+/// `XDG_DATA_DIRS` -- for this process only, capture mode only. The variant
+/// capture (an os-release with no LOGO) still renders the fallback, so both
+/// paths stay in the walkthrough artifacts.
+pub fn stage_repo_icons() {
+    let Ok(entries) = std::fs::read_dir(REPO_ICON_DIR) else {
+        return;
+    };
+    let root = std::env::temp_dir().join(format!("tuna-capture-icons-{}", std::process::id()));
+    let hicolor = root.join("icons").join("hicolor");
+    let apps = hicolor.join("scalable").join("apps");
+    if std::fs::create_dir_all(&apps).is_err()
+        || std::fs::write(hicolor.join("index.theme"), STAGED_INDEX_THEME).is_err()
+    {
+        return;
+    }
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().is_some_and(|e| e == "svg") {
+            let _ = std::fs::copy(&path, apps.join(entry.file_name()));
+        }
+    }
+    let rest = std::env::var("XDG_DATA_DIRS")
+        .ok()
+        .filter(|d| !d.is_empty())
+        .unwrap_or_else(|| "/usr/local/share:/usr/share".to_string());
+    std::env::set_var("XDG_DATA_DIRS", format!("{}:{rest}", root.display()));
+}
+
 pub fn fixture_probe() -> Result<crate::probe::Facts, String> {
     let path = std::env::var(crate::probe::FAKE_ENV)
         .ok()
@@ -87,6 +132,9 @@ const FIXTURE_LOG_RUNNING: &[&str] = &[
     r#"{"elapsed_ms": 2000, "message": "Pulling image: layer 18/71", "timestamp": "1970-01-01T00:00:00Z", "type": "substep"}"#,
     r#"{"elapsed_ms": 2400, "message": "Pulling image: layer 47/71", "timestamp": "1970-01-01T00:00:00Z", "type": "substep"}"#,
 ];
+
+/// What the capture types into the options page's two passphrase fields.
+const CAPTURE_PASSPHRASE: &str = "correct horse battery staple";
 
 pub struct Capture {
     pub dir: PathBuf,
@@ -195,6 +243,15 @@ pub fn update(app: &mut TunaInstaller, message: Message) -> Task<crate::Message>
                     app.installing = false;
                     app.install_ok = true;
                 }
+                // A passphrase choice, typed twice, so the walkthrough shows
+                // the fields a needs_passphrase type adds (the KDE capture
+                // shows the same state). Masked on screen; the text report
+                // carries the field labels, never the value.
+                Page::Options => {
+                    app.recipe.encryption.enc_type = "luks-passphrase".into();
+                    app.recipe.encryption.passphrase = CAPTURE_PASSPHRASE.into();
+                    app.passphrase_confirm = CAPTURE_PASSPHRASE.into();
+                }
                 _ => {}
             }
 
@@ -269,6 +326,26 @@ pub fn update(app: &mut TunaInstaller, message: Message) -> Task<crate::Message>
                     eprintln!(
                         "capture: Restart is live before the recovery key was acknowledged (#129)"
                     );
+                    std::process::exit(2);
+                }
+            }
+
+            // A needs_passphrase choice must bring both fields with it,
+            // and a matching pair must leave Continue live. Neither is
+            // visible to a pixel histogram.
+            if page == Some(Page::Options) {
+                for label in [crate::ui::copy::OPTIONS_PASSPHRASE, crate::ui::copy::OPTIONS_PASSPHRASE_CONFIRM] {
+                    if !text.contains(label) {
+                        eprintln!("capture: options page with a passphrase choice has no {label:?} field");
+                        std::process::exit(2);
+                    }
+                }
+                if text.contains(CAPTURE_PASSPHRASE) {
+                    eprintln!("capture: the passphrase leaked into the page text");
+                    std::process::exit(2);
+                }
+                if !app.options_ok() {
+                    eprintln!("capture: Continue is held although both passphrases match");
                     std::process::exit(2);
                 }
             }

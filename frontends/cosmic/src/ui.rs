@@ -44,6 +44,9 @@ pub mod copy {
     pub const OPTIONS_DISK_ENCRYPTION: &str = "Disk encryption";
     pub const OPTIONS_PASSPHRASE: &str = "Passphrase";
     pub const OPTIONS_PASSPHRASE_HINT: &str = "Required to unlock at boot";
+    pub const OPTIONS_PASSPHRASE_CONFIRM: &str = "Confirm passphrase";
+    pub const OPTIONS_PASSPHRASE_CONFIRM_HINT: &str = "Type it again";
+    pub const OPTIONS_PASSPHRASE_MISMATCH: &str = "Passphrases do not match.";
 
     pub const CONFIRM_SUBTITLE: &str = "The last screen before anything is written.";
     pub const CONFIRM_SUMMARY: &str = "Summary";
@@ -146,6 +149,11 @@ pub fn page_text(app: &TunaInstaller) -> Vec<String> {
             if crate::validate::needs_passphrase(&recipe.encryption.enc_type) {
                 t.push(OPTIONS_PASSPHRASE.to_string());
                 t.push(OPTIONS_PASSPHRASE_HINT.to_string());
+                t.push(OPTIONS_PASSPHRASE_CONFIRM.to_string());
+                t.push(OPTIONS_PASSPHRASE_CONFIRM_HINT.to_string());
+                if confirm_mismatch(app) {
+                    t.push(OPTIONS_PASSPHRASE_MISMATCH.to_string());
+                }
             }
             for field in ["encryption", "filesystem", "btrfsSubvolumes"] {
                 if let Some(p) = app.problem(field) {
@@ -153,7 +161,7 @@ pub fn page_text(app: &TunaInstaller) -> Vec<String> {
                 }
             }
             t.push(BACK.to_string());
-            if app.encryption_ok() {
+            if app.options_ok() {
                 t.push(CONTINUE.to_string());
             }
             t
@@ -319,27 +327,95 @@ fn nav_row<'a>(
     row.align_y(Alignment::Center).into()
 }
 
-/// Resolve the optional product logo once, after the application selects its
-/// icon theme. Missing/unreadable files and missing themed icons use the
-/// original neutral artwork. The failed-install page never calls this helper.
-fn product_logo(fallback: &'static str) -> widget::icon::Icon {
-    static LOGO: std::sync::OnceLock<Option<widget::icon::Handle>> = std::sync::OnceLock::new();
-    let handle = LOGO.get_or_init(|| {
-        let path = match branding::logo_source(&branding::get().logo, crate::offline::in_flatpak()) {
-            branding::LogoSource::File(path) => Some(std::path::PathBuf::from(path)),
-            branding::LogoSource::Theme(name) => widget::icon::from_name(name)
-                .size(64).fallback(None).path(),
-            branding::LogoSource::None => None,
-        }?;
-        if !path.is_file() || std::fs::File::open(&path).is_err() {
-            return None;
-        }
-        Some(widget::icon::from_path(path))
-    });
-    match handle {
-        Some(handle) => handle.clone().icon().size(64)
-            .content_fit(cosmic::iced::ContentFit::Contain),
-        None => widget::icon::from_name(fallback).size(64).icon(),
+/// One branding artwork value (an absolute file or a theme icon name,
+/// `branding::logo_source`), resolved to something that is really there.
+/// Missing/unreadable files and theme names the icon theme lacks are `None`,
+/// never a placeholder: the caller decides the fallback.
+fn resolve_artwork(spec: &str) -> Option<widget::icon::Handle> {
+    let path = match branding::logo_source(spec, crate::offline::in_flatpak()) {
+        branding::LogoSource::File(path) => Some(std::path::PathBuf::from(path)),
+        branding::LogoSource::Theme(name) => widget::icon::from_name(name)
+            .size(128).fallback(None).path(),
+        branding::LogoSource::None => None,
+    }?;
+    if !path.is_file() || std::fs::File::open(&path).is_err() {
+        return None;
+    }
+    Some(widget::icon::from_path(path))
+}
+
+/// The product's artwork for a page: the branding resolver's
+/// `assets.<asset_key>` first, then its `logo`. Resolved once per page, after
+/// the application has selected its icon theme.
+fn product_artwork(asset_key: &str) -> Option<widget::icon::Handle> {
+    let b = branding::get();
+    b.assets
+        .get(asset_key)
+        .and_then(|spec| resolve_artwork(spec))
+        .or_else(|| resolve_artwork(&b.logo))
+}
+
+fn welcome_artwork() -> Option<&'static widget::icon::Handle> {
+    static ART: std::sync::OnceLock<Option<widget::icon::Handle>> = std::sync::OnceLock::new();
+    ART.get_or_init(|| product_artwork("welcome_image")).as_ref()
+}
+
+fn complete_artwork() -> Option<&'static widget::icon::Handle> {
+    static ART: std::sync::OnceLock<Option<widget::icon::Handle>> = std::sync::OnceLock::new();
+    ART.get_or_init(|| product_artwork("complete_image")).as_ref()
+}
+
+/// Product artwork at hero size, as COSMIC Initial Setup shows a logo.
+fn artwork_icon(handle: &widget::icon::Handle) -> Element<'static, Message> {
+    handle
+        .clone()
+        .icon()
+        .size(96)
+        .content_fit(cosmic::iced::ContentFit::Contain)
+        .into()
+}
+
+/// The welcome page's artwork. With no product artwork, a themed symbolic
+/// icon in an accent-tinted disc, the shape Niri and GNOME's status pages
+/// use, so the page reads as deliberate rather than as a missing image. It
+/// used to be `drive-harddisk-symbolic` bare at 64 px, which Adwaita draws as
+/// a rounded square with a circle: in the walkthrough it looked like a camera
+/// placeholder. `computer-symbolic` (this computer is what gets installed
+/// to) is in Adwaita, which the application names as its icon theme.
+fn welcome_logo() -> Element<'static, Message> {
+    if let Some(handle) = welcome_artwork() {
+        return artwork_icon(handle);
+    }
+    widget::container(widget::icon::from_name("computer-symbolic").size(48).icon())
+        .width(Length::Fixed(96.0))
+        .height(Length::Fixed(96.0))
+        .align_x(Alignment::Center)
+        .align_y(Alignment::Center)
+        .class(cosmic::theme::Container::custom(|theme| {
+            let cosmic = theme.cosmic();
+            let accent = cosmic.accent_color();
+            cosmic::iced::widget::container::Style {
+                icon_color: Some(cosmic.accent_text_color().into()),
+                text_color: Some(cosmic.accent_text_color().into()),
+                background: Some(cosmic::iced::Background::Color(
+                    cosmic::iced::Color::from_rgba(accent.red, accent.green, accent.blue, 0.18),
+                )),
+                border: cosmic::iced::Border {
+                    radius: 48.0.into(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            }
+        }))
+        .into()
+}
+
+/// The successful done page's artwork: product artwork, else the themed
+/// check. The failed-install page never calls this.
+fn done_logo(fallback: &'static str) -> Element<'static, Message> {
+    match complete_artwork() {
+        Some(handle) => artwork_icon(handle),
+        None => widget::icon::from_name(fallback).size(64).icon().into(),
     }
 }
 
@@ -347,7 +423,7 @@ fn welcome(app: &TunaInstaller) -> Element<'_, Message> {
     let spacing = cosmic::theme::active().cosmic().spacing;
 
     let hero = widget::column::with_children(vec![
-        product_logo("drive-harddisk-symbolic").into(),
+        welcome_logo(),
         widget::text::title1(t_line("welcome_title")).into(),
         widget::text::body(with_product(WELCOME_BODY)).into(),
     ]);
@@ -442,6 +518,11 @@ fn disk_select(app: &TunaInstaller) -> Element<'_, Message> {
     )
 }
 
+/// The confirmation has text and differs from the passphrase.
+fn confirm_mismatch(app: &TunaInstaller) -> bool {
+    !app.passphrase_confirm().is_empty() && !app.passphrases_match()
+}
+
 fn options(app: &TunaInstaller) -> Element<'_, Message> {
     let spacing = cosmic::theme::active().cosmic().spacing;
     let recipe = app.recipe();
@@ -515,6 +596,10 @@ fn options(app: &TunaInstaller) -> Element<'_, Message> {
     // pointers. In Rust the equivalent mistake cannot compile, but the
     // conditional is still the honest UI — and "tpm2-luks" alone must NOT show
     // this field, since fisherman never reads a passphrase for it.
+    //
+    // Typed twice, as on KDE and Niri: a typo in a passphrase nobody sees
+    // is a disk nobody can unlock. The mismatch line appears once the
+    // confirmation has text, and Continue waits for a match.
     if needs_passphrase {
         security = security.add(widget::settings::item(
             OPTIONS_PASSPHRASE,
@@ -527,6 +612,22 @@ fn options(app: &TunaInstaller) -> Element<'_, Message> {
             .on_input(Message::PassphraseChanged)
             .width(Length::Fixed(260.0)),
         ));
+        let mut confirm_item = widget::settings::item::builder(OPTIONS_PASSPHRASE_CONFIRM);
+        if confirm_mismatch(app) {
+            confirm_item = confirm_item.description(OPTIONS_PASSPHRASE_MISMATCH);
+        }
+        security = security.add(
+            confirm_item.control(
+                widget::secure_input(
+                    OPTIONS_PASSPHRASE_CONFIRM_HINT,
+                    app.passphrase_confirm(),
+                    Some(Message::TogglePassphraseVisible),
+                    app.passphrase_hidden(),
+                )
+                .on_input(Message::PassphraseConfirmChanged)
+                .width(Length::Fixed(260.0)),
+            ),
+        );
     }
 
     let body = widget::scrollable(
@@ -544,7 +645,7 @@ fn options(app: &TunaInstaller) -> Element<'_, Message> {
             // Blocked while fisherman reports a problem with the page (an
             // empty passphrase, a bad hostname), so it can never reach
             // Confirm/Install and only then be rejected (tunaOS#734).
-            app.encryption_ok()
+            app.options_ok()
                 .then_some((CONTINUE.to_string(), Message::NextPage, false)),
         ),
     )
@@ -707,7 +808,7 @@ fn done(app: &TunaInstaller) -> Element<'_, Message> {
 
     let mut hero = widget::column::with_children(vec![
         if app.install_ok() {
-            product_logo(icon).into()
+            done_logo(icon)
         } else {
             widget::icon::from_name(icon).size(64).icon().into()
         },
