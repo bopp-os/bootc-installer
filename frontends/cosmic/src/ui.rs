@@ -25,8 +25,8 @@ pub mod copy {
 
     pub const WELCOME_BODY: &str =
         "Welcome. This assistant will guide you through installing {product} onto this computer.";
-    pub const WELCOME_CAPTION: &str = "You will choose a target disk and a few options. Nothing is \
-         written to any disk until you confirm on the last step.";
+    pub const WELCOME_CAPTION: &str = "You will choose a target disk and a few options, and create \
+         your account. Nothing is written to any disk until you confirm on the last step.";
 
     pub const DISK_TITLE: &str = "Select a disk";
     pub const DISK_SUBTITLE: &str = "Everything on the disk you pick will be erased.";
@@ -47,6 +47,23 @@ pub mod copy {
     pub const OPTIONS_PASSPHRASE_CONFIRM: &str = "Confirm passphrase";
     pub const OPTIONS_PASSPHRASE_CONFIRM_HINT: &str = "Type it again";
     pub const OPTIONS_PASSPHRASE_MISMATCH: &str = "Passphrases do not match.";
+
+    // The account page. No heading here may hold a parity-report screen
+    // keyword (shared/walkthrough/parity_report.py SCREENS), or the report
+    // credits this page as another screen.
+    pub const ACCOUNT_TITLE: &str = "Create your account";
+    pub const ACCOUNT_SUBTITLE: &str =
+        "You will sign in with this account. It can administer the computer.";
+    pub const ACCOUNT_SECTION: &str = "Account";
+    pub const ACCOUNT_USERNAME: &str = "Username";
+    pub const ACCOUNT_USERNAME_HINT: &str = "Lowercase, for example alex";
+    pub const ACCOUNT_FULLNAME: &str = "Full name";
+    pub const ACCOUNT_FULLNAME_HINT: &str = "Optional";
+    pub const ACCOUNT_PASSWORD: &str = "Password";
+    pub const ACCOUNT_PASSWORD_HINT: &str = "Required";
+    pub const ACCOUNT_PASSWORD_CONFIRM: &str = "Confirm password";
+    pub const ACCOUNT_PASSWORD_CONFIRM_HINT: &str = "Type it again";
+    pub const ACCOUNT_PASSWORD_MISMATCH: &str = "Passwords do not match.";
 
     pub const CONFIRM_SUBTITLE: &str = "The last screen before anything is written.";
     pub const CONFIRM_SUMMARY: &str = "Summary";
@@ -166,6 +183,37 @@ pub fn page_text(app: &TunaInstaller) -> Vec<String> {
             }
             t
         }
+        Page::Account => {
+            // The field labels and the username; never the password.
+            let mut t = vec![
+                ACCOUNT_TITLE.to_string(),
+                ACCOUNT_SUBTITLE.to_string(),
+                ACCOUNT_SECTION.to_string(),
+                ACCOUNT_USERNAME.to_string(),
+                app.username().to_string(),
+            ];
+            if let Some(p) = app.problem("user") {
+                t.push(p.render());
+            }
+            t.push(ACCOUNT_FULLNAME.to_string());
+            if !app.fullname().is_empty() {
+                t.push(app.fullname().to_string());
+            }
+            t.extend([
+                ACCOUNT_PASSWORD.to_string(),
+                ACCOUNT_PASSWORD_HINT.to_string(),
+                ACCOUNT_PASSWORD_CONFIRM.to_string(),
+                ACCOUNT_PASSWORD_CONFIRM_HINT.to_string(),
+            ]);
+            if app.password_mismatch() {
+                t.push(ACCOUNT_PASSWORD_MISMATCH.to_string());
+            }
+            t.push(BACK.to_string());
+            if app.account_ok() {
+                t.push(CONTINUE.to_string());
+            }
+            t
+        }
         Page::Confirm => vec![
             t_line("confirm_title"),
             confirm_subtitle(),
@@ -180,6 +228,8 @@ pub fn page_text(app: &TunaInstaller) -> Vec<String> {
             encryption_text(&recipe.encryption.enc_type, "_label"),
             OPTIONS_HOSTNAME.to_string(),
             recipe.hostname.clone(),
+            ACCOUNT_USERNAME.to_string(),
+            app.username().to_string(),
             CONFIRM_IMAGE.to_string(),
             confirm_image(app),
             BACK.to_string(),
@@ -292,6 +342,7 @@ pub fn view(app: &TunaInstaller) -> Element<'_, Message> {
         Page::Welcome => welcome(app),
         Page::DiskSelect => disk_select(app),
         Page::Options => options(app),
+        Page::Account => account(app),
         Page::Confirm => confirm(app),
         Page::Installing => installing(app),
         Page::Done => done(app),
@@ -651,6 +702,79 @@ fn options(app: &TunaInstaller) -> Element<'_, Message> {
     )
 }
 
+/// The account the installed system is created with: the recipe's `user`
+/// block. Required, because this frontend has no image catalog to say the
+/// image makes its own first user. Continue waits for a username and a
+/// password typed the same twice, and for fisherman to accept the username
+/// (`validate --json --partial`, shown through `validate_username_*`).
+fn account(app: &TunaInstaller) -> Element<'_, Message> {
+    let spacing = cosmic::theme::active().cosmic().spacing;
+
+    let mut username_item = widget::settings::item::builder(ACCOUNT_USERNAME);
+    if let Some(p) = app.problem("user") {
+        username_item = username_item.description(p.render());
+    }
+    let mut confirm_item = widget::settings::item::builder(ACCOUNT_PASSWORD_CONFIRM);
+    if app.password_mismatch() {
+        confirm_item = confirm_item.description(ACCOUNT_PASSWORD_MISMATCH);
+    }
+
+    let section = widget::settings::section()
+        .title(ACCOUNT_SECTION)
+        .add(
+            username_item.control(
+                widget::text_input(ACCOUNT_USERNAME_HINT, app.username())
+                    .on_input(Message::UsernameChanged)
+                    .width(Length::Fixed(260.0)),
+            ),
+        )
+        .add(widget::settings::item(
+            ACCOUNT_FULLNAME,
+            widget::text_input(ACCOUNT_FULLNAME_HINT, app.fullname())
+                .on_input(Message::FullnameChanged)
+                .width(Length::Fixed(260.0)),
+        ))
+        .add(widget::settings::item(
+            ACCOUNT_PASSWORD,
+            widget::secure_input(
+                ACCOUNT_PASSWORD_HINT,
+                app.password(),
+                Some(Message::TogglePasswordVisible),
+                app.password_hidden(),
+            )
+            .on_input(Message::PasswordChanged)
+            .width(Length::Fixed(260.0)),
+        ))
+        .add(
+            confirm_item.control(
+                widget::secure_input(
+                    ACCOUNT_PASSWORD_CONFIRM_HINT,
+                    app.password_confirm(),
+                    Some(Message::TogglePasswordVisible),
+                    app.password_hidden(),
+                )
+                .on_input(Message::PasswordConfirmChanged)
+                .width(Length::Fixed(260.0)),
+            ),
+        );
+
+    let body = widget::scrollable(
+        widget::settings::view_column(vec![section.into()]).spacing(spacing.space_m),
+    )
+    .height(Length::Fill);
+
+    page_frame(
+        ACCOUNT_TITLE,
+        ACCOUNT_SUBTITLE,
+        body.into(),
+        nav_row(
+            Some(Message::BackPage),
+            app.account_ok()
+                .then_some((CONTINUE.to_string(), Message::NextPage, false)),
+        ),
+    )
+}
+
 fn confirm(app: &TunaInstaller) -> Element<'_, Message> {
     let spacing = cosmic::theme::active().cosmic().spacing;
     let recipe = app.recipe();
@@ -672,6 +796,10 @@ fn confirm(app: &TunaInstaller) -> Element<'_, Message> {
         .add(widget::settings::item(
             OPTIONS_HOSTNAME,
             widget::text::body(recipe.hostname.clone()),
+        ))
+        .add(widget::settings::item(
+            ACCOUNT_USERNAME,
+            widget::text::body(app.username().to_string()),
         ))
         .add(widget::settings::item(CONFIRM_IMAGE, widget::text::body(image)));
 
@@ -934,6 +1062,39 @@ mod tests {
                 !encryption_text(id, "_description").is_empty(),
                 "{id}: no description"
             );
+        }
+    }
+
+    /// The parity report credits a page with a screen when its text holds
+    /// one of that screen's keywords. The account page is none of them.
+    #[test]
+    fn the_account_page_matches_no_parity_screen_keyword() {
+        use super::copy::*;
+        let report = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../shared/walkthrough/parity_report.py"
+        ))
+        .expect("parity_report.py");
+        let mut keywords = Vec::new();
+        for list in report.split("\"keywords\": [").skip(1) {
+            let list = &list[..list.find(']').expect("keyword list ends")];
+            for (i, part) in list.split('"').enumerate() {
+                if i % 2 == 1 {
+                    keywords.push(part.replace("\\u2026", "\u{2026}").to_lowercase());
+                }
+            }
+        }
+        assert!(keywords.len() > 20, "keywords not found: {keywords:?}");
+        let page = [
+            ACCOUNT_TITLE, ACCOUNT_SUBTITLE, ACCOUNT_SECTION, ACCOUNT_USERNAME,
+            ACCOUNT_USERNAME_HINT, ACCOUNT_FULLNAME, ACCOUNT_FULLNAME_HINT,
+            ACCOUNT_PASSWORD, ACCOUNT_PASSWORD_HINT, ACCOUNT_PASSWORD_CONFIRM,
+            ACCOUNT_PASSWORD_CONFIRM_HINT, ACCOUNT_PASSWORD_MISMATCH, BACK, CONTINUE,
+        ]
+        .join(" ")
+        .to_lowercase();
+        for k in &keywords {
+            assert!(!page.contains(k.as_str()), "the account page says {k:?}");
         }
     }
 

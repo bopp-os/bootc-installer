@@ -34,6 +34,43 @@ pub struct Recipe {
     #[serde(default = "default_selinux")]
     pub selinux_disabled: bool,
     pub hostname: String,
+    /// The account fisherman creates (`user`, shared/recipe/README.md).
+    /// Left out when no username was typed: fisherman then creates none.
+    /// Built only by [`user_block`], so the groups are always the same.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user: Option<User>,
+}
+
+/// The recipe's `user` block, as XFCE writes it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct User {
+    pub username: String,
+    #[serde(default)]
+    pub fullname: String,
+    /// Plain text, like the LUKS passphrase: the recipe only ever travels on
+    /// fisherman's stdin, never to a file.
+    #[serde(default)]
+    pub password: String,
+    #[serde(default)]
+    pub groups: Vec<String>,
+}
+
+/// The first user administers the machine: `wheel`, as on every frontend
+/// that writes a `user` block.
+pub const USER_GROUPS: [&str; 1] = ["wheel"];
+
+/// The account page's fields as the recipe's `user` block, or `None` when no
+/// username was typed (fisherman skips user creation for an empty one).
+pub fn user_block(username: &str, fullname: &str, password: &str) -> Option<User> {
+    if username.is_empty() {
+        return None;
+    }
+    Some(User {
+        username: username.to_string(),
+        fullname: fullname.to_string(),
+        password: password.to_string(),
+        groups: USER_GROUPS.iter().map(|g| (*g).to_string()).collect(),
+    })
 }
 
 // true makes bootc boot the installed system with selinux=0. Keep SELinux on.
@@ -75,6 +112,7 @@ impl Default for Recipe {
             distro_id: crate::branding::NEUTRAL_ID.into(),
             selinux_disabled: false,
             hostname: crate::branding::NEUTRAL_ID.into(),
+            user: None,
         }
     }
 }

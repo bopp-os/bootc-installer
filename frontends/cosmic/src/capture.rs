@@ -136,6 +136,11 @@ const FIXTURE_LOG_RUNNING: &[&str] = &[
 /// What the capture types into the options page's two passphrase fields.
 const CAPTURE_PASSPHRASE: &str = "correct horse battery staple";
 
+/// What the capture types into the account page. No product in any of them.
+const CAPTURE_USERNAME: &str = "alex";
+const CAPTURE_FULLNAME: &str = "Alex Example";
+const CAPTURE_PASSWORD: &str = "tr0ub4dor and 3";
+
 pub struct Capture {
     pub dir: PathBuf,
     pub index: usize,
@@ -252,6 +257,20 @@ pub fn update(app: &mut TunaInstaller, message: Message) -> Task<crate::Message>
                     app.recipe.encryption.passphrase = CAPTURE_PASSPHRASE.into();
                     app.passphrase_confirm = CAPTURE_PASSPHRASE.into();
                 }
+                // Filled in through the page's own messages, so the recipe's
+                // user block is built the way typing builds it (sync_user).
+                // update() returns no task for these in capture mode: no
+                // validate round-trip shells out.
+                Page::Account => {
+                    for msg in [
+                        crate::Message::UsernameChanged(CAPTURE_USERNAME.into()),
+                        crate::Message::FullnameChanged(CAPTURE_FULLNAME.into()),
+                        crate::Message::PasswordChanged(CAPTURE_PASSWORD.into()),
+                        crate::Message::PasswordConfirmChanged(CAPTURE_PASSWORD.into()),
+                    ] {
+                        let _ = cosmic::Application::update(app, msg);
+                    }
+                }
                 _ => {}
             }
 
@@ -348,6 +367,40 @@ pub fn update(app: &mut TunaInstaller, message: Message) -> Task<crate::Message>
                     eprintln!("capture: Continue is held although both passphrases match");
                     std::process::exit(2);
                 }
+            }
+
+            // The account page must show its fields, keep the password off
+            // the page, leave Continue live once filled in, and have put a
+            // user block with the wheel group into the recipe.
+            if page == Some(Page::Account) {
+                for label in [
+                    crate::ui::copy::ACCOUNT_USERNAME,
+                    crate::ui::copy::ACCOUNT_FULLNAME,
+                    crate::ui::copy::ACCOUNT_PASSWORD,
+                    crate::ui::copy::ACCOUNT_PASSWORD_CONFIRM,
+                ] {
+                    if !text.contains(label) {
+                        eprintln!("capture: the account page has no {label:?} field");
+                        std::process::exit(2);
+                    }
+                }
+                if text.contains(CAPTURE_PASSWORD) {
+                    eprintln!("capture: the password leaked into the page text");
+                    std::process::exit(2);
+                }
+                if !app.account_ok() {
+                    eprintln!("capture: Continue is held although the account is complete");
+                    std::process::exit(2);
+                }
+                let user = app.recipe().user.clone().unwrap_or_default();
+                if user.username != CAPTURE_USERNAME || user.groups != crate::model::USER_GROUPS {
+                    eprintln!("capture: the recipe's user block is {user:?}");
+                    std::process::exit(2);
+                }
+            }
+            if page == Some(Page::Confirm) && !text.contains(CAPTURE_USERNAME) {
+                eprintln!("capture: the confirm page does not show the username");
+                std::process::exit(2);
             }
 
             let capture = app.capture.as_mut().unwrap();

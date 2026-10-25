@@ -26,7 +26,7 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 REAL = "/usr/local/lib/tuna-e2e/fisherman.real"
 # Frontends whose wizard has a required account step: their recipe must
 # create a user, in wheel, or the installed system has nobody to log in as.
-USER_STEP = {"niri"}
+USER_STEP = {"cosmic", "niri"}
 
 
 def main():
@@ -91,7 +91,6 @@ def main():
     # system's kernel arguments. Four frontends once hardcoded it (#160).
     if recipe.get("selinuxDisabled") is True:
         failures.append("selinuxDisabled is true: the installed system would boot with selinux=0")
-
     if frontend in USER_STEP:
         user = recipe.get("user") or {}
         if not user.get("username"):

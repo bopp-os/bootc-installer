@@ -79,6 +79,8 @@ pub enum Page {
     Welcome,
     DiskSelect,
     Options,
+    /// Username, full name and password: the recipe's `user` block.
+    Account,
     Confirm,
     Installing,
     Done,
@@ -87,10 +89,11 @@ pub enum Page {
 impl Page {
     /// Wizard order. Also the capture order, so a new page cannot be added
     /// without appearing in the walkthrough.
-    pub const ORDER: [Page; 6] = [
+    pub const ORDER: [Page; 7] = [
         Page::Welcome,
         Page::DiskSelect,
         Page::Options,
+        Page::Account,
         Page::Confirm,
         Page::Installing,
         Page::Done,
@@ -101,6 +104,7 @@ impl Page {
             Page::Welcome => "welcome",
             Page::DiskSelect => "disk",
             Page::Options => "options",
+            Page::Account => "account",
             Page::Confirm => "confirm",
             Page::Installing => "installing",
             Page::Done => "done",
@@ -112,6 +116,7 @@ impl Page {
             Page::Welcome => "Welcome",
             Page::DiskSelect => "Select a disk",
             Page::Options => "Options",
+            Page::Account => "Account",
             Page::Confirm => "Confirm",
             Page::Installing => "Installing",
             Page::Done => "Finished",
@@ -138,20 +143,38 @@ pub fn available_encryption_choices(has_tpm: bool) -> Vec<&'static str> {
         .collect()
 }
 
-/// The options page's fields as a partial recipe, for
+/// The options and account pages' fields as a partial recipe, for
 /// `validate --json --partial -` on stdin (never argv: the passphrase is one
-/// of them). The passphrase goes only with a needs_passphrase choice.
+/// of them). The passphrase goes only with a needs_passphrase choice. Of the
+/// account only the username goes: fisherman has no password rule, so the
+/// password never leaves this process before the install.
 fn partial_recipe(r: &Recipe) -> serde_json::Value {
     let mut encryption = serde_json::json!({ "type": r.encryption.enc_type });
     if validate::needs_passphrase(&r.encryption.enc_type) {
         encryption["passphrase"] = serde_json::json!(r.encryption.passphrase);
     }
+    let username = r.user.as_ref().map_or("", |u| u.username.as_str());
     serde_json::json!({
         "hostname": r.hostname,
         "filesystem": r.filesystem,
         "btrfsSubvolumes": r.btrfs_subvolumes,
         "encryption": encryption,
+        "user": { "username": username },
     })
+}
+
+/// Whether a fisherman problem belongs to the account page (`user.*`). The
+/// two pages share one check; each holds Continue only on its own fields.
+fn is_account_field(field: &str) -> bool {
+    field == "user" || field.starts_with("user.")
+}
+
+/// The account page's own rules (fisherman checks only the username's
+/// form): a username and a password, the password typed the same twice.
+/// The account is required: this frontend has no image catalog to say the
+/// image creates its own first user, which is also XFCE's default.
+fn account_complete(username: &str, password: &str, confirm: &str) -> bool {
+    !username.is_empty() && !password.is_empty() && password == confirm
 }
 
 // -------------------------------------------------------------- messages ----
@@ -173,6 +196,12 @@ pub enum Message {
     /// The options page's "Confirm passphrase" field.
     PassphraseConfirmChanged(String),
     TogglePassphraseVisible,
+    /// The account page's fields.
+    UsernameChanged(String),
+    FullnameChanged(String),
+    PasswordChanged(String),
+    PasswordConfirmChanged(String),
+    TogglePasswordVisible,
     /// The done page's "I have saved my recovery key" box.
     RecoveryAckToggled(bool),
     /// Put the recovery key on the clipboard.
@@ -230,6 +259,15 @@ pub struct TunaInstaller {
     /// sent to fisherman: matching it is this frontend's only rule
     /// (shared/recipe/README.md), as on KDE and Niri.
     passphrase_confirm: String,
+    /// The account page's fields. `recipe.user` is rebuilt from them on
+    /// every change (`sync_user`), so a full name typed before the username
+    /// is kept while the block itself is still left out.
+    username: String,
+    fullname: String,
+    password: String,
+    /// The password typed a second time. Never in the recipe.
+    password_confirm: String,
+    password_hidden: bool,
     /// Ticked by the user on the done page once they have written the
     /// recovery key down. It gates Restart (#129).
     recovery_ack: bool,
@@ -302,6 +340,36 @@ impl TunaInstaller {
             &self.recipe.encryption.passphrase,
             &self.passphrase_confirm,
         )
+    }
+    pub fn username(&self) -> &str {
+        &self.username
+    }
+    pub fn fullname(&self) -> &str {
+        &self.fullname
+    }
+    pub fn password(&self) -> &str {
+        &self.password
+    }
+    pub fn password_confirm(&self) -> &str {
+        &self.password_confirm
+    }
+    pub fn password_hidden(&self) -> bool {
+        self.password_hidden
+    }
+    /// The confirmation has text and differs from the password.
+    pub fn password_mismatch(&self) -> bool {
+        !self.password_confirm.is_empty() && self.password != self.password_confirm
+    }
+    /// Whether Continue is live on the account page: a username and a
+    /// password typed the same twice (this frontend's rules), and no
+    /// fisherman problem with the username.
+    pub fn account_ok(&self) -> bool {
+        account_complete(&self.username, &self.password, &self.password_confirm)
+            && !self.problems.iter().any(|p| is_account_field(&p.field))
+    }
+    /// The recipe's `user` block, from the account page's fields.
+    fn sync_user(&mut self) {
+        self.recipe.user = model::user_block(&self.username, &self.fullname, &self.password);
     }
     pub fn capturing(&self) -> bool {
         self.capture.is_some()
@@ -376,7 +444,8 @@ impl TunaInstaller {
     /// are fisherman's; a check that could not run blocks nothing, because
     /// the install runs the same rules before it touches a disk.
     pub fn encryption_ok(&self) -> bool {
-        self.problems.is_empty()
+        // The username is the account page's: it holds that page, not this.
+        !self.problems.iter().any(|p| !is_account_field(&p.field))
     }
 
     /// Whether Continue is live on the Options page: fisherman's rules
@@ -411,7 +480,8 @@ impl TunaInstaller {
         let next = match self.page {
             Page::Welcome => Page::DiskSelect,
             Page::DiskSelect => Page::Options,
-            Page::Options => Page::Confirm,
+            Page::Options => Page::Account,
+            Page::Account => Page::Confirm,
             Page::Confirm | Page::Installing | Page::Done => return None,
         };
         self.page = next;
@@ -420,7 +490,8 @@ impl TunaInstaller {
 
     fn retreat(&mut self) {
         self.page = match self.page {
-            Page::Confirm => Page::Options,
+            Page::Confirm => Page::Account,
+            Page::Account => Page::Options,
             Page::Options => Page::DiskSelect,
             Page::DiskSelect => Page::Welcome,
             other => other,
@@ -475,6 +546,11 @@ impl cosmic::Application for TunaInstaller {
             installing: false,
             passphrase_hidden: true,
             passphrase_confirm: String::new(),
+            username: String::new(),
+            fullname: String::new(),
+            password: String::new(),
+            password_confirm: String::new(),
+            password_hidden: true,
             recovery_ack: false,
             // Until the probe answers: no TPM choices, no warning.
             has_tpm: false,
@@ -612,6 +688,32 @@ impl cosmic::Application for TunaInstaller {
             }
             Message::TogglePassphraseVisible => {
                 self.passphrase_hidden = !self.passphrase_hidden;
+                Task::none()
+            }
+            Message::UsernameChanged(u) => {
+                self.username = u;
+                self.sync_user();
+                self.check_fields()
+            }
+            Message::FullnameChanged(f) => {
+                // Free text; fisherman has no rule for it.
+                self.fullname = f;
+                self.sync_user();
+                Task::none()
+            }
+            Message::PasswordChanged(p) => {
+                // Not sent to validate: fisherman accepts any password, and
+                // this frontend's rules are local (account_ok).
+                self.password = p;
+                self.sync_user();
+                Task::none()
+            }
+            Message::PasswordConfirmChanged(p) => {
+                self.password_confirm = p;
+                Task::none()
+            }
+            Message::TogglePasswordVisible => {
+                self.password_hidden = !self.password_hidden;
                 Task::none()
             }
             Message::RecoveryAckToggled(v) => {
@@ -981,6 +1083,7 @@ mod tests {
             serde_json::json!({
                 "hostname": "my_pc", "filesystem": "xfs",
                 "btrfsSubvolumes": false, "encryption": {"type": "tpm2-luks"},
+                "user": {"username": ""},
             })
         );
         let mut with_passphrase = r.clone();
@@ -1040,6 +1143,9 @@ mod tests {
         recipe.filesystem = "xfs".into();
         recipe.image = "quay.io/centos-bootc/centos-bootc:c10s".into();
         recipe.hostname = "cosmic-e2e".into();
+        // The account page's fields, through the same builder the page uses
+        // (sync_user): every TunaOS COSMIC image needs its first user made.
+        recipe.user = model::user_block("tester", "E2E Tester", "e2e-password");
 
         // Drive the real stream and feed it through the real parser, which
         // is what the install page does. The old form called run_fisherman()
@@ -1083,10 +1189,79 @@ mod tests {
             log.contains("Installation complete"),
             "the log carried no completion event"
         );
-        assert!(
-            std::path::Path::new("/tmp/tuna-e2e/recipe.json").exists(),
-            "the shim recorded no recipe"
+        let recorded = std::fs::read_to_string("/tmp/tuna-e2e/recipe.json")
+            .expect("the shim recorded no recipe");
+        let recorded: serde_json::Value = serde_json::from_str(&recorded).unwrap();
+        assert_eq!(recorded["user"]["username"], "tester", "no user block reached fisherman");
+        assert_eq!(recorded["user"]["groups"], serde_json::json!(["wheel"]));
+    }
+
+    #[test]
+    fn the_user_block_carries_the_account_and_wheel() {
+        let mut recipe = Recipe::default();
+        recipe.user = model::user_block("alex", "Alex Example", "s3cret");
+        let json: serde_json::Value = serde_json::to_value(&recipe).unwrap();
+        assert_eq!(
+            json["user"],
+            serde_json::json!({
+                "username": "alex", "fullname": "Alex Example",
+                "password": "s3cret", "groups": ["wheel"],
+            })
         );
+        // The partial for validate has the username and never the password.
+        let partial = super::partial_recipe(&recipe);
+        assert_eq!(partial["user"], serde_json::json!({"username": "alex"}));
+        assert!(!partial.to_string().contains("s3cret"));
+        // And it round-trips.
+        let restored: Recipe = serde_json::from_value(json).unwrap();
+        assert_eq!(restored.user, recipe.user);
+    }
+
+    #[test]
+    fn no_username_leaves_the_user_block_out() {
+        assert_eq!(model::user_block("", "Alex Example", "s3cret"), None);
+        let recipe = Recipe::default();
+        let json: serde_json::Value = serde_json::to_value(&recipe).unwrap();
+        assert!(json.get("user").is_none(), "{json}");
+    }
+
+    /// The account is required: no username, no password or a mismatched
+    /// confirmation holds Continue.
+    #[test]
+    fn the_account_page_holds_continue_until_it_is_complete() {
+        use super::account_complete;
+        assert!(account_complete("alex", "s3cret", "s3cret"));
+        assert!(!account_complete("", "s3cret", "s3cret"), "no username");
+        assert!(!account_complete("alex", "", ""), "no password");
+        assert!(!account_complete("alex", "s3cret", "s3cre"), "mismatch");
+        assert!(!account_complete("alex", "s3cret", ""), "not confirmed");
+    }
+
+    /// fisherman's username problem holds the account page, not the options
+    /// page; a hostname problem holds the options page, not the account page.
+    #[test]
+    fn each_page_is_held_only_by_its_own_fields() {
+        use super::is_account_field;
+        assert!(is_account_field("user.username"));
+        assert!(is_account_field("user"));
+        assert!(!is_account_field("hostname"));
+        assert!(!is_account_field("username"));
+        assert!(!is_account_field("encryption.passphrase"));
+        let p = validate::Problem {
+            field: "user.username".into(),
+            code: "username_reserved".into(),
+            message: "m".into(),
+        };
+        assert_eq!(p.render(), branding::get().text("validate_username_reserved"));
+    }
+
+    #[test]
+    fn the_account_page_follows_options_and_precedes_confirm() {
+        let order = Page::ORDER;
+        let at = |p: Page| order.iter().position(|q| *q == p).unwrap();
+        assert_eq!(at(Page::Account), at(Page::Options) + 1);
+        assert_eq!(at(Page::Confirm), at(Page::Account) + 1);
+        assert_eq!(order.len(), 7);
     }
 
     #[test]

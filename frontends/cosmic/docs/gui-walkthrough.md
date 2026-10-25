@@ -42,21 +42,32 @@ Such a mode adds two fields, **Passphrase** and **Confirm passphrase**; a
 mismatch shows under the second and holds **Continue**. The capture renders
 this state.
 
-## 4. Confirm
+## 4. Account
 
-![Confirm](screenshots/04-confirm.png)
+![Account](screenshots/04-account.png)
+
+The account the installed system is created with: the recipe's `user` block
+(username, full name, password, in the `wheel` group). It is required, since
+this frontend has no image catalog to say an image makes its own first user.
+**Continue** waits for a username and a password typed the same twice, and
+for fisherman to accept the username (`fisherman validate --json --partial`,
+shown under the field). The capture fills it in.
+
+## 5. Confirm
+
+![Confirm](screenshots/05-confirm.png)
 
 The summary of everything chosen, under a COSMIC warning banner. This is the
 last screen before anything is written, and the only one whose action button is
 styled destructive rather than suggested. Everything above this point is
 reversible by quitting.
 
-## 5. Installing
+## 6. Installing
 
-![Installing](screenshots/05-installing.png)
+![Installing](screenshots/06-installing.png)
 
-`fisherman` runs with the recipe JSON written 0600 under `XDG_RUNTIME_DIR`
-(it may hold a passphrase), and its output streams into the log card.
+`fisherman` reads the recipe JSON on stdin, never from a file (it holds the
+passphrase and the account password), and its output streams into the log card.
 
 The log shown here is fixture text. The capture harness sets this page
 directly and never sends `StartInstall`; the message handler additionally
@@ -65,9 +76,9 @@ not decorative — in `tuna-installer-xfce` the page-enter hook called
 `start_install()`, so a capture written the obvious way would have partitioned
 the CI runner's disk.
 
-## 6. Finished
+## 7. Finished
 
-![Finished](screenshots/06-done.png)
+![Finished](screenshots/07-done.png)
 
 Success or failure, coloured from the COSMIC theme's `success_text_color` /
 `destructive_text_color` rather than hardcoded RGB. Remove the installation
