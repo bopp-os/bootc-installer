@@ -25,7 +25,7 @@ harness does not read its widget text yet) · ⏳ no capture on record.
 |---|---|---|---|---|
 | GNOME | 8 | 8 | 7 | tests/gui/capture-screens.py (GTK4/libadwaita under Xvfb) |
 | KDE Plasma | 7 | 7 | 6 | tests/capture.cpp (Kirigami/QML, offscreen) |
-| COSMIC | 7 | 7 | 6 | src/capture.rs (libcosmic on lavapipe under Xvfb) |
+| COSMIC | 8 | 8 | 7 | src/capture.rs (libcosmic on lavapipe under Xvfb) |
 | Niri | 8 | 8 | 7 | tests/gui/capture-screens.py (QML via PyQt6, offscreen) |
 | XFCE | 9 | 9 | 8 | tests/gui/capture-screens.py (GTK3 under Xvfb) |
 
@@ -73,12 +73,13 @@ libcosmic / iced (Rust). Source: `frontends/cosmic/`.
 | <img src="cosmic/01-welcome.png" width="360"> | **welcome**  <br><sub>Welcome to TunaOS Welcome. This assistant will guide you through installing TunaOS onto this computer. You will choose a target disk and a f</sub> |
 | <img src="cosmic/02-disk.png" width="360"> | **disk**  <br><sub>Select a disk Everything on the disk you pick will be erased. Samsung SSD 870 EVO 500GB /dev/sda · 465.8 GiB · SATA Extreme SSD /dev/sdc · 9</sub> |
 | <img src="cosmic/03-options.png" width="360"> | **options**  <br><sub>Options Sensible defaults are already chosen. Change them only if you need to. System Computer name tunaos Filesystem xfs Encryption Disk en</sub> |
-| <img src="cosmic/04-confirm.png" width="360"> | **confirm**  <br><sub>Confirm installation The last screen before anything is written. Everything on /dev/sda will be erased. This cannot be undone.  Summary Targ</sub> |
-| <img src="cosmic/05-installing.png" width="360"> | **installing**  <br><sub>Installing TunaOS… fisherman is writing the image to disk. [1/8] Partitioning disk
+| <img src="cosmic/04-account.png" width="360"> | **account**  <br><sub>Create your account You will sign in with this account. It can administer the computer. Account Username alex Full name Alex Example Passwor</sub> |
+| <img src="cosmic/05-confirm.png" width="360"> | **confirm**  <br><sub>Confirm installation The last screen before anything is written. Everything on /dev/sda will be erased. This cannot be undone.  Summary Targ</sub> |
+| <img src="cosmic/06-installing.png" width="360"> | **installing**  <br><sub>Installing TunaOS… fisherman is writing the image to disk. [1/8] Partitioning disk
 [2/8] Formatting EFI partition
 [3/8] Formatting root file</sub> |
-| <img src="cosmic/06-done.png" width="360"> | **done**  <br><sub>TunaOS is installed Remove the installation media and restart the computer. Restart now Close</sub> |
-| <img src="cosmic/07-recovery.png" width="360"> | **recovery**  <br><sub>TunaOS is installed Remove the installation media and restart the computer. Save your recovery key If your disk fails to unlock automaticall</sub> |
+| <img src="cosmic/07-done.png" width="360"> | **done**  <br><sub>TunaOS is installed Remove the installation media and restart the computer. Restart now Close</sub> |
+| <img src="cosmic/08-recovery.png" width="360"> | **recovery**  <br><sub>TunaOS is installed Remove the installation media and restart the computer. Save your recovery key If your disk fails to unlock automaticall</sub> |
 
 ## Niri
 
