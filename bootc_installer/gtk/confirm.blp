@@ -68,8 +68,10 @@ template $BootcConfirm: Adw.Bin {
             valign: center;
             halign: center;
 
+            // Destructive: Install erases the disk named in the warning above,
+            // like the red Install button in the other frontends.
             styles [
-              "suggested-action",
+              "destructive-action",
               "pill",
             ]
           }

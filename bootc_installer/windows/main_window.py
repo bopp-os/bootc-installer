@@ -40,6 +40,19 @@ except ImportError:
 logger = logging.getLogger("Installer::Window")
 
 
+# The app's own symbolic icons live in the gresource under this path.
+# GTK only searches "<resource base path>/icons" on its own, and that base
+# path follows the application id, so the Devel and variant ids
+# (BOOTC_APP_ID) and the capture harness would never find them.
+_RESOURCE_ICONS = "/org/bootcinstaller/Installer/icons"
+
+
+def _register_resource_icons(widget):
+    theme = Gtk.IconTheme.get_for_display(widget.get_display())
+    if _RESOURCE_ICONS not in (theme.get_resource_path() or []):
+        theme.add_resource_path(_RESOURCE_ICONS)
+
+
 @Gtk.Template(resource_path="/org/bootcinstaller/Installer/gtk/window.ui")
 class BootcWindow(Adw.ApplicationWindow):
     __gtype_name__ = "BootcWindow"
@@ -55,6 +68,7 @@ class BootcWindow(Adw.ApplicationWindow):
 
     def __init__(self, autoinstall_recipe: str | None = None, **kwargs):
         super().__init__(**kwargs)
+        _register_resource_icons(self)
 
         logger.info("bootc Installer version: %s", _APP_VERSION)
 
