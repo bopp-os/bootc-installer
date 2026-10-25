@@ -65,8 +65,10 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install pytest and coverage
-        run: pip install pytest pytest-cov
+      # segno draws the phone companion's QR code; the Flatpak ships the
+      # same pinned version (flatpak/org.bootcinstaller.Installer.json).
+      - name: Install pytest, coverage and segno
+        run: pip install pytest pytest-cov segno==1.6.6
 
       - name: Run unit tests
         run: pytest tests/unit/ -v --tb=short --cov=bootc_installer --cov-report=xml --cov-report=term-missing --cov-fail-under=51
@@ -113,6 +115,7 @@ jobs:
             python3-pytest \
             python3-gi \
             python3-gi-cairo \
+            python3-segno \
             gir1.2-gtk-4.0 \
             gir1.2-adw-1 \
             gir1.2-vte-3.91 \

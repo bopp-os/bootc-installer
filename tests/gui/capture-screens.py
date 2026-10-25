@@ -142,14 +142,20 @@ def _refuse_to_install(*_args, **_kwargs):
 
 
 PATCHERS = [
-    patch("bootc_installer.defaults.qr_companion.CompanionServer"),
+    # A server that "started" with a fixed token, so the QR code encodes a
+    # real-looking URL instead of a MagicMock repr. The token never reaches
+    # the page text (tests/ui/test_qr_companion_page.py).
+    patch("bootc_installer.defaults.qr_companion.CompanionServer", **{
+        "return_value.start.return_value": True,
+        "return_value.auth_token": "capture-session-token",
+    }),
     patch("bootc_installer.defaults.qr_companion.get_local_ip", return_value="192.0.2.10"),
     patch.object(progress_mod.BootcProgress, "start", _refuse_to_install),
 ]
 
 CAPTIONS = {
     "welcome": "What the installer is about to do.",
-    "qr_companion": "Optional phone companion for typing on a laptop keyboard.",
+    "qr_companion": "Optional: scan a QR code and type your account details on your phone.",
     "disk": "Choose the disk. Nothing is written yet.",
     "slurp": "Bring documents and settings over from an existing Windows install.",
     "encryption": "Full-disk encryption, with or without TPM2.",
