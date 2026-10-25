@@ -1,6 +1,6 @@
 {
   "01-welcome.png": "What the installer is about to do.",
-  "02-qr_companion.png": "Optional phone companion for typing on a laptop keyboard.",
+  "02-qr_companion.png": "Optional: scan a QR code and type your account details on your phone.",
   "03-disk.png": "Choose the disk. Nothing is written yet.",
   "04-slurp.png": "Bring documents and settings over from an existing Windows install.",
   "05-encryption.png": "Full-disk encryption, with or without TPM2.",
