@@ -1,9 +1,9 @@
 {
     "activation_key": null,
-    "advanced_transitions": 6,
+    "advanced_transitions": 7,
     "failures": 0,
     "flavor": "kde",
-    "frames": 7,
+    "frames": 8,
     "harness": "tests/capture.cpp (Kirigami/QML, offscreen)",
     "notes": "GPU-less capture: pages are driven programmatically and text is read from the item tree, so this reports SCREEN PARITY only. It does not measure keyboard navigation, compositor rendering, or that the frontend launches under its real desktop — those stay the VM walkthrough's job.",
     "ocr": false,
@@ -15,7 +15,7 @@
             "name": "01-welcome",
             "png": "docs/screenshots/01-welcome.png",
             "rendered": true,
-            "stddev": 0.07073759120507153
+            "stddev": 0.07072686175203091
         },
         {
             "colours": 437,
@@ -24,7 +24,7 @@
             "name": "02-disk",
             "png": "docs/screenshots/02-disk.png",
             "rendered": true,
-            "stddev": 0.061355493603093725
+            "stddev": 0.06134422222183268
         },
         {
             "colours": 394,
@@ -33,46 +33,55 @@
             "name": "03-encryption",
             "png": "docs/screenshots/03-encryption.png",
             "rendered": true,
-            "stddev": 0.062280428141081444
+            "stddev": 0.06226990800977924
         },
         {
-            "colours": 334,
-            "flat": 0.6744011976047904,
-            "ink": 0.3189870259481038,
-            "name": "04-confirm",
-            "png": "docs/screenshots/04-confirm.png",
+            "colours": 251,
+            "flat": 0.6966535678642715,
+            "ink": 0.29721806387225547,
+            "name": "04-account",
+            "png": "docs/screenshots/04-account.png",
             "rendered": true,
-            "stddev": 0.058492046172550015
+            "stddev": 0.07536962871657688
+        },
+        {
+            "colours": 372,
+            "flat": 0.6182634730538922,
+            "ink": 0.37498440618762474,
+            "name": "05-confirm",
+            "png": "docs/screenshots/05-confirm.png",
+            "rendered": true,
+            "stddev": 0.06160353176013785
         },
         {
             "colours": 342,
             "flat": 0.7577829415795275,
             "ink": 0.24132332350224922,
-            "name": "05-progress",
-            "png": "docs/screenshots/05-progress.png",
+            "name": "06-progress",
+            "png": "docs/screenshots/06-progress.png",
             "rendered": true,
-            "stddev": 0.07662794953123316
+            "stddev": 0.07664987097993729
         },
         {
             "colours": 338,
             "flat": 0.9778237642362334,
             "ink": 0.018551133028061523,
-            "name": "06-done",
-            "png": "docs/screenshots/06-done.png",
+            "name": "07-done",
+            "png": "docs/screenshots/07-done.png",
             "rendered": true,
-            "stddev": 0.0686703079740047
+            "stddev": 0.06868508308822775
         },
         {
             "colours": 418,
             "flat": 0.8383086767641188,
             "ink": 0.15008218856404837,
-            "name": "07-recovery",
-            "png": "docs/screenshots/07-recovery.png",
+            "name": "08-recovery",
+            "png": "docs/screenshots/08-recovery.png",
             "rendered": true,
-            "stddev": 0.07004482863649242
+            "stddev": 0.07006032057049805
         }
     ],
-    "rendered_frames": 7,
+    "rendered_frames": 8,
     "screens": {
         "disk": true,
         "done": true,
@@ -99,8 +108,8 @@
                 "remove the installation media"
             ],
             "on_pages": [
-                "06-done",
-                "07-recovery"
+                "07-done",
+                "08-recovery"
             ],
             "reached": true,
             "required": false
@@ -120,7 +129,7 @@
                 "partitioning"
             ],
             "on_pages": [
-                "05-progress"
+                "06-progress"
             ],
             "reached": true,
             "required": false
@@ -130,7 +139,7 @@
                 "confirm installation"
             ],
             "on_pages": [
-                "04-confirm"
+                "05-confirm"
             ],
             "reached": true,
             "required": true
@@ -153,10 +162,11 @@
     "transition_pixels": [
         176009,
         126678,
-        120506,
-        371181,
-        478289,
+        121281,
+        89483,
+        339632,
+        478306,
         96844
     ],
-    "visual_states": 7
+    "visual_states": 8
 }

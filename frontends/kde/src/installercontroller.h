@@ -38,6 +38,12 @@ class InstallerController : public QObject
     Q_PROPERTY(QString passphrase READ passphrase WRITE setPassphrase NOTIFY recipeChanged)
     Q_PROPERTY(QString hostname READ hostname WRITE setHostname NOTIFY recipeChanged)
     Q_PROPERTY(QString image READ image WRITE setImage NOTIFY recipeChanged)
+    // The account the installed system gets (the recipe's `user` block,
+    // groups ["wheel"]). There is no image catalog here to say an image
+    // creates its own first user, so the account step requires one.
+    Q_PROPERTY(QString username READ username WRITE setUsername NOTIFY recipeChanged)
+    Q_PROPERTY(QString fullname READ fullname WRITE setFullname NOTIFY recipeChanged)
+    Q_PROPERTY(QString userPassword READ userPassword WRITE setUserPassword NOTIFY recipeChanged)
 
     // fisherman's tpm.usable from `fisherman probe --json`
     // (shared/probe/README.md). TPM options are hidden, not disabled, when
@@ -63,9 +69,11 @@ class InstallerController : public QObject
     // fisherman's problems with the fields (`validate --json --partial`), in
     // the words of the copy key validate_<code>; empty when there is none or
     // the check could not run. The encryption step shows the passphrase
-    // problem and holds Next on it; the confirm step shows the hostname's.
+    // problem and holds Next on it; the account step does the same with the
+    // username's; the confirm step shows the hostname's.
     Q_PROPERTY(QString hostnameProblem READ hostnameProblem NOTIFY problemsChanged)
     Q_PROPERTY(QString encryptionProblem READ encryptionProblem NOTIFY problemsChanged)
+    Q_PROPERTY(QString usernameProblem READ usernameProblem NOTIFY problemsChanged)
 
     // The product name, resolved ONCE at startup from the branding contract
     // (src/branding.h: branding.json, then os-release, then neutral). Every
@@ -140,6 +148,12 @@ public:
     void setHostname(const QString &v);
     QString image() const { return m_recipe.image; }
     void setImage(const QString &v);
+    QString username() const { return m_recipe.user.username; }
+    void setUsername(const QString &v);
+    QString fullname() const { return m_recipe.user.fullname; }
+    void setFullname(const QString &v);
+    QString userPassword() const { return m_recipe.user.password; }
+    void setUserPassword(const QString &v);
 
     bool hasTpm() const { return m_hasTpm; }
     QStringList unmetRequirements() const { return m_unmet; }
@@ -151,6 +165,7 @@ public:
     QString liveImage() const { return m_liveImage; }
     QString hostnameProblem() const { return problemText(QStringLiteral("hostname")); }
     QString encryptionProblem() const { return problemText(QStringLiteral("encryption")); }
+    QString usernameProblem() const { return problemText(QStringLiteral("user.username")); }
     // The fields as a partial recipe for `validate --json --partial -`.
     QByteArray partialRecipe() const;
     // Takes in fisherman's answer (validate --json stdout). Public for tests.

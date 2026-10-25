@@ -54,6 +54,7 @@ Kirigami.Page {
         ListElement { stepId: "welcome";    name: "Welcome";               url: "modules/welcome/main.qml" }
         ListElement { stepId: "disk";       name: "Target Disk";           url: "modules/disk/main.qml" }
         ListElement { stepId: "encryption"; name: "Disk Encryption";       url: "modules/encryption/main.qml" }
+        ListElement { stepId: "account";    name: "User Account";          url: "modules/account/main.qml" }
         ListElement { stepId: "confirm";    name: "Confirm Installation";  url: "modules/confirm/main.qml" }
         ListElement { stepId: "progress";   name: "Installing";            url: "modules/progress/main.qml" }
         ListElement { stepId: "done";       name: "Finished";              url: "modules/done/main.qml" }
@@ -195,9 +196,11 @@ Kirigami.Page {
         anchors.fill: parent
         spacing: 0
 
-        // Step indicator: "Step N of 6 · Name" and one dot per step, the
-        // shared six-step contract as COSMIC's header and Niri's dots show
-        // it. Colours come from Kirigami.Theme, sizes from Kirigami.Units.
+        // Step indicator: "Step N of 7 · Name" and one dot per step, the
+        // way COSMIC's header and Niri's dots show it. The count is the
+        // model's: the shared six screens plus the account step, which the
+        // screen contract has no row for. Colours come from Kirigami.Theme,
+        // sizes from Kirigami.Units.
         RowLayout {
             objectName: "stepIndicator"
             spacing: Kirigami.Units.largeSpacing
@@ -338,6 +341,7 @@ Kirigami.Page {
 
             Button {
                 id: nextButton
+                objectName: "nextButton"
 
                 readonly property bool isInstall: root.currentStepId === "confirm"
                 readonly property bool isClose: root.currentStepId === "done"

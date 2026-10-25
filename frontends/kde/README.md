@@ -30,9 +30,10 @@ hardcoded pixel metrics, and no more forced Fusion style.
 1. **Welcome** — brief intro
 2. **Target Disk** — `fisherman probe --json` lists the disks fisherman offers (`../../shared/probe/README.md`); user picks one
 3. **Disk Encryption** — none / passphrase / TPM / TPM + passphrase
-4. **Confirm** — summary of choices (disk, filesystem, encryption, hostname, image)
-5. **Installing** — writes recipe JSON, runs `fisherman <recipe.json>`, streams output
-6. **Finished** — success/failure with close button
+4. **User Account** — username, optional full name, password typed twice; writes the recipe's `user` block (groups `wheel`). fisherman checks the username while it is typed
+5. **Confirm** — summary of choices (disk, filesystem, encryption, hostname, username, image)
+6. **Installing** — pipes the recipe JSON to `fisherman -` on stdin, streams output
+7. **Finished** — success/failure with close button
 
 ## Build
 

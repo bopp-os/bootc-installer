@@ -14,8 +14,10 @@ TunaComponents.SetupModule {
     id: root
 
     // fisherman's hostname rule (`validate --json --partial`) holds Install
-    // while it reports a problem.
+    // while it reports a problem, and so does a missing or rejected account:
+    // without one the installed system has nobody to sign in as.
     nextEnabled: InstallerController.disk.length > 0 && InstallerController.hostnameProblem === ""
+        && InstallerController.username.length > 0 && InstallerController.usernameProblem === ""
 
     contentItem: ScrollView {
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
@@ -97,6 +99,18 @@ TunaComponents.SetupModule {
                 FormCard.FormTextDelegate {
                     text: "Hostname"
                     description: InstallerController.hostname
+                }
+
+                FormCard.FormDelegateSeparator {}
+
+                // The account step's username (and full name, when given);
+                // never the password.
+                FormCard.FormTextDelegate {
+                    objectName: "confirmUsername"
+                    text: "Username"
+                    description: InstallerController.fullname.length > 0
+                        ? InstallerController.username + " (" + InstallerController.fullname + ")"
+                        : InstallerController.username
                 }
 
                 FormCard.FormDelegateSeparator {}

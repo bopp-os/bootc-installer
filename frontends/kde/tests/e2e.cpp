@@ -17,8 +17,13 @@
 #include <QCoreApplication>
 #include <QEventLoop>
 #include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTextStream>
 #include <QTimer>
+
+#include <functional>
 
 int main(int argc, char *argv[])
 {
@@ -39,6 +44,39 @@ int main(int argc, char *argv[])
     controller.setImage(QStringLiteral("quay.io/centos-bootc/centos-bootc:c10s"));
     controller.setEncryptionType(QStringLiteral("none"));
     controller.setHostname(QStringLiteral("kde-e2e"));
+
+    // The account step. First a name fisherman refuses, through the same
+    // `validate --json --partial -` the step runs while the user types (the
+    // shim hands it to the real fisherman): the step must show the problem
+    // and hold Next on it. Then the account the user actually creates.
+    const auto waitFor = [](const std::function<bool()> &done, int ms) {
+        QEventLoop wait;
+        QTimer poll;
+        QObject::connect(&poll, &QTimer::timeout, &wait, [&] {
+            if (done())
+                wait.quit();
+        });
+        QTimer::singleShot(ms, &wait, &QEventLoop::quit);
+        poll.start(50);
+        wait.exec();
+        return done();
+    };
+    controller.setUsername(QStringLiteral("root"));
+    if (!waitFor([&] { return !controller.usernameProblem().isEmpty(); }, 15000)) {
+        out << "FAIL: fisherman reported no problem with the username \"root\" — the "
+               "account step's validate --json --partial call is not reaching it\n";
+        return 1;
+    }
+    out << "e2e: username \"root\" refused: " << controller.usernameProblem() << "\n";
+    const QString username = QStringLiteral("kdeuser");
+    controller.setUsername(username);
+    controller.setFullname(QStringLiteral("KDE E2E"));
+    controller.setUserPassword(QStringLiteral("kde-e2e-password"));
+    if (!waitFor([&] { return controller.usernameProblem().isEmpty(); }, 15000)) {
+        out << "FAIL: fisherman still reports a problem with the username \"" << username
+            << "\": " << controller.usernameProblem() << "\n";
+        return 1;
+    }
 
     int exitCode = -1;
     QEventLoop loop;
@@ -81,6 +119,26 @@ int main(int argc, char *argv[])
     }
     if (!controller.log().contains(QLatin1String("Installation complete"))) {
         out << "FAIL: the log carried no completion event\n";
+        return 1;
+    }
+    // The recipe fisherman was handed on stdin, as the shim kept it: it
+    // must create the account (shared/e2e/check-recipe.py then runs the
+    // real fisherman's full validate and the schema over the same file).
+    QFile kept(QStringLiteral("/tmp/tuna-e2e/recipe.json"));
+    if (!kept.open(QIODevice::ReadOnly)) {
+        out << "FAIL: the shim kept no recipe at /tmp/tuna-e2e/recipe.json\n";
+        return 1;
+    }
+    const QJsonObject user = QJsonDocument::fromJson(kept.readAll()).object()
+                                 .value(QStringLiteral("user")).toObject();
+    if (user.value(QStringLiteral("username")).toString() != username
+        || user.value(QStringLiteral("password")).toString().isEmpty()
+        || user.value(QStringLiteral("groups")).toArray() != QJsonArray{QStringLiteral("wheel")}) {
+        out << "FAIL: the recipe's user block is not the account the step created: "
+            << QJsonDocument(QJsonObject{{QStringLiteral("username"), user.value(QStringLiteral("username"))},
+                                         {QStringLiteral("groups"), user.value(QStringLiteral("groups"))}})
+                   .toJson(QJsonDocument::Compact)
+            << "\n";
         return 1;
     }
     out << "OK: KDE controller reached installCompleted(0) through sudo /usr/local/bin/fisherman\n";

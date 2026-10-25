@@ -30,6 +30,14 @@ QJsonObject Recipe::toJson() const
     obj["distroID"] = distroID;
     obj["selinuxDisabled"] = selinuxDisabled;
     obj["hostname"] = hostname;
+    if (!user.username.isEmpty()) {
+        obj["user"] = QJsonObject{
+            {QStringLiteral("username"), user.username},
+            {QStringLiteral("fullname"), user.fullname},
+            {QStringLiteral("password"), user.password},
+            {QStringLiteral("groups"), QJsonArray::fromStringList(user.groups)},
+        };
+    }
     return obj;
 }
 
@@ -55,6 +63,15 @@ Recipe Recipe::fromJson(const QJsonObject &obj)
     r.distroID = obj["distroID"].toString();
     r.selinuxDisabled = obj["selinuxDisabled"].toBool(false);
     r.hostname = obj["hostname"].toString();
+    const QJsonObject user = obj["user"].toObject();
+    r.user.username = user["username"].toString();
+    r.user.fullname = user["fullname"].toString();
+    r.user.password = user["password"].toString();
+    if (user.contains(QStringLiteral("groups"))) {
+        r.user.groups.clear();
+        for (const auto &val : user["groups"].toArray())
+            r.user.groups.append(val.toString());
+    }
     return r;
 }
 

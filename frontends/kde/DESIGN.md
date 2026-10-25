@@ -14,14 +14,15 @@ pattern: each screen is a `SetupModule` under
 the user may continue; the wizard owns navigation, headings, and the shared
 Back and Next buttons.
 
-The six modules are:
+The seven modules are:
 
 1. `welcome`
 2. `disk`
 3. `encryption`
-4. `confirm`
-5. `progress`
-6. `done`
+4. `account`
+5. `confirm`
+6. `progress`
+7. `done`
 
 The wizard uses slide transitions between modules instead of `SwipeView`,
 matching KISS's behaviour during window resizing. Do not put backend work in a

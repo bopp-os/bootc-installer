@@ -74,7 +74,7 @@ password is not empty, it matches its confirmation, and how strong it is.
 | Frontend | Fields it validates | How |
 |---|---|---|
 | GNOME | hostname (disk page), username (user page) | `fisherman_validate.LiveCheck` |
-| KDE | passphrase (encryption step), hostname (confirm step) | `InstallerController::runValidate`, a `QProcess` |
+| KDE | passphrase (encryption step), username (account step), hostname (confirm step) | `InstallerController::runValidate`, a `QProcess` |
 | COSMIC | hostname, passphrase (options page), username (account page) | `validate::check`, on a blocking task |
 | Niri | hostname, username, passphrase | the backend's `validate` command, from a QML `Process` |
 | XFCE | hostname, username, passphrase | `fisherman_validate.LiveCheck` |

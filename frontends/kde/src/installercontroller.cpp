@@ -58,6 +58,9 @@ QByteArray InstallerController::partialRecipe() const
         {QStringLiteral("filesystem"), m_recipe.filesystem},
         {QStringLiteral("btrfsSubvolumes"), m_recipe.btrfsSubvolumes},
         {QStringLiteral("encryption"), enc},
+        // The username only: fisherman has no rule for the full name or the
+        // password, and the password has no business on a validate call.
+        {QStringLiteral("user"), QJsonObject{{QStringLiteral("username"), m_recipe.user.username}}},
     };
     return QJsonDocument(partial).toJson(QJsonDocument::Compact);
 }
@@ -206,6 +209,31 @@ void InstallerController::setImage(const QString &v)
     if (m_recipe.image == v)
         return;
     m_recipe.image = v;
+    Q_EMIT recipeChanged();
+}
+
+void InstallerController::setUsername(const QString &v)
+{
+    if (m_recipe.user.username == v)
+        return;
+    m_recipe.user.username = v;
+    Q_EMIT recipeChanged();
+    checkFields();
+}
+
+void InstallerController::setFullname(const QString &v)
+{
+    if (m_recipe.user.fullname == v)
+        return;
+    m_recipe.user.fullname = v;
+    Q_EMIT recipeChanged();
+}
+
+void InstallerController::setUserPassword(const QString &v)
+{
+    if (m_recipe.user.password == v)
+        return;
+    m_recipe.user.password = v;
     Q_EMIT recipeChanged();
 }
 

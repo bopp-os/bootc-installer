@@ -1,6 +1,6 @@
 // Renders every wizard step to PNG for docs/gui-walkthrough.md and the README.
 //
-// Reuses the real QML module — the same Wizard.qml and the same six step
+// Reuses the real QML module — the same Wizard.qml and the same seven step
 // modules the installer loads — so the images document the shipped UI rather
 // than a replica. Only main.cpp is swapped.
 //
@@ -132,7 +132,7 @@ constexpr int MIN_STEP_TEXT = 10;
 // card step reclassify itself as a hero page and pass.
 bool isHeroStep(const QString &name)
 {
-    return name == u"01-welcome"_s || name == u"06-done"_s;
+    return name == u"01-welcome"_s || name == u"07-done"_s;
 }
 
 void settle(int ms)
@@ -667,6 +667,14 @@ int main(int argc, char *argv[])
     controller->setImage(u"ghcr.io/tuna-os/albacore:kde"_s);
     controller->setEncryptionType(u"luks-passphrase"_s);
     controller->setPassphrase(u"correct horse battery staple"_s);
+    // The account step's fields, so it and the confirm step show a real
+    // account. The confirmation field belongs to the page, not the
+    // controller; the 04-account frame below types into it.
+    const QString captureUsername = u"alex"_s;
+    const QString capturePassword = u"account password 42"_s;
+    controller->setUsername(captureUsername);
+    controller->setFullname(u"Alex Example"_s);
+    controller->setUserPassword(capturePassword);
     // Fills the log and the result. Runs no process and touches no disk.
     // exitCode 0, not a "still running" sentinel: loadDemoState() always sets
     // the finished flag, so there is no way to express a live install through
@@ -683,12 +691,13 @@ int main(int argc, char *argv[])
         {0, u"01-welcome"_s},
         {1, u"02-disk"_s},
         {2, u"03-encryption"_s},
-        {3, u"04-confirm"_s},
-        {4, u"05-progress"_s},
-        {5, u"06-done"_s},
+        {3, u"04-account"_s},
+        {4, u"05-confirm"_s},
+        {5, u"06-progress"_s},
+        {6, u"07-done"_s},
         // The done page again, as a TPM install leaves it. Same step, other
         // state -- not a step of its own.
-        {5, u"07-recovery"_s},
+        {6, u"08-recovery"_s},
     };
 
     QVector<Finding> findings;
@@ -701,13 +710,13 @@ int main(int argc, char *argv[])
 
         // The install "finishes" between the progress and done screens, which
         // is the only ordering under which each screen shows what it is for.
-        if (step.second == u"06-done"_s) {
+        if (step.second == u"07-done"_s) {
             controller->loadDemoState(
                 QString::fromUtf8(kFixtureLogRunning)
                     + QString::fromUtf8(kFixtureLogFinished),
                 0);
         }
-        if (step.second == u"07-recovery"_s) {
+        if (step.second == u"08-recovery"_s) {
             controller->loadDemoState(
                 QString::fromUtf8(kFixtureLogRunning)
                     + QString::fromUtf8(kFixtureLogFinished)
@@ -725,6 +734,38 @@ int main(int argc, char *argv[])
         }
         settle(400);
 
+        // The account step holds Next until the password is typed twice,
+        // and lets go once it is: a page that never released Next would
+        // strand the user before the confirm step, and one that never held
+        // it would install with a mistyped password. The frame is taken
+        // after the second typing, so it shows a form ready to go on.
+        if (step.second == u"04-account"_s) {
+            QQuickItem *next = findItemByName(window->contentItem(), u"nextButton"_s);
+            QQuickItem *username = findItemByName(window->contentItem(), u"accountUsername"_s);
+            QQuickItem *confirm = findItemByName(window->contentItem(), u"accountPasswordConfirm"_s);
+            if (!next || !username || !confirm) {
+                out << "FAIL: the account step has no nextButton, accountUsername or "
+                       "accountPasswordConfirm in the visual tree\n";
+                return 1;
+            }
+            if (username->property("text").toString() != captureUsername) {
+                out << "FAIL: the username field does not show the controller's username\n";
+                return 1;
+            }
+            if (next->property("enabled").toBool()) {
+                out << "FAIL: Next is live on the account step before the password "
+                       "was confirmed\n";
+                return 1;
+            }
+            confirm->setProperty("text", capturePassword);
+            settle(100);
+            if (!next->property("enabled").toBool()) {
+                out << "FAIL: typing the password a second time did not enable Next "
+                       "on the account step\n";
+                return 1;
+            }
+        }
+
         const QImage image = window->grabWindow();
         if (image.isNull()) {
             out << "FAIL: grabWindow() returned nothing for " << step.second << "\n";
@@ -740,8 +781,21 @@ int main(int argc, char *argv[])
             out << "FAIL: could not locate the step content area for " << step.second << "\n";
             return 1;
         }
-        if (step.second == u"05-progress"_s && !progressBarIsDrawn(window, image, out))
+        if (step.second == u"06-progress"_s && !progressBarIsDrawn(window, image, out))
             return 1;
+        // The last page before the disk is written says who will sign in,
+        // and never the password.
+        if (step.second == u"05-confirm"_s) {
+            const QString shown = itemText(window->contentItem());
+            if (!shown.contains(captureUsername)) {
+                out << "FAIL: the confirm step does not show the account's username\n";
+                return 1;
+            }
+            if (shown.contains(capturePassword)) {
+                out << "FAIL: the confirm step shows the account's password\n";
+                return 1;
+            }
+        }
         // The recovery frame is the one screen where a correct-looking render
         // can still be wrong: the panel can draw with the key missing or its
         // labels empty, and Restart can be live before the acknowledgement.
@@ -753,7 +807,7 @@ int main(int argc, char *argv[])
         // defaults, and an assertion that only looked for the KEY passed it.
         // KDE compiles copy-defaults.json in (branding.cpp), so this should
         // hold -- which is why it is worth asserting rather than assuming.
-        if (step.second == u"07-recovery"_s) {
+        if (step.second == u"08-recovery"_s) {
             const QString shown = itemText(window->contentItem());
             if (!shown.contains(controller->recoveryKey())) {
                 out << "FAIL: the recovery key is not in the rendered text -- "

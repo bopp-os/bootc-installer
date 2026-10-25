@@ -137,13 +137,13 @@ All five render the identity keys (`name`, `id`, `default_hostname`,
 | Encryption: TPM / TPM + passphrase | yes | yes | yes | yes | yes |
 | Recovery key page after TPM enrolment | yes | yes | yes | yes | yes |
 | Hostname | generated, editable on confirm | no (branding default, shown on confirm) | field | field on confirm | field |
-| User account | yes (companion or wizard) | no | no | no | yes |
+| User account | yes (companion or wizard) | yes (account step) | yes (account page) | yes (account page) | yes |
 | Phone companion (QR) | yes | no | no | no | no |
 | Keyboard / language / timezone | yes | no | no | no | no |
 | Progress bar from fisherman's protocol | yes | yes | yes | yes | yes |
 | Restart from the done page | yes | yes | yes | yes | yes |
 | Show log after failure | yes | log path | log in page | log in page | log tail |
-| Step indicator for the six-step contract | page header | "Step N of 6 · name" + dots | "Step N of 6 · name" + bar | "Step N of 6 · name" + dots | page title |
+| Step indicator for the six-step contract | page header | "Step N of 7 · name" + dots | "Step N of 7 · name" + bar | "Step N of 7 · name" + dots | page title |
 | Screenshot walkthrough + parity report | yes | yes | yes | yes | yes |
 | End-to-end gate (real install and boot) | yes | yes | yes | yes | yes |
 
@@ -166,8 +166,14 @@ All five render the identity keys (`name`, `id`, `default_hostname`,
    enrolment. GNOME shows a page. The other four show a panel on the done
    screen. Each holds the restart button until the user acknowledges the
    key (#129).
-4. **User account** (KDE, COSMIC, Niri): a username, full name and
-   password step that writes the recipe's `user` block, as XFCE does.
+4. ~~**User account** (KDE, COSMIC, Niri)~~ — **closed.** Each now has a
+   required account step (username, optional full name, password typed
+   twice) that writes the recipe's `user` block in `wheel`, as XFCE does.
+   Their TunaOS images all set `needs_user_creation`, so an install used to
+   end with nobody to sign in as. The extra step makes their indicators read
+   "of 7"; the screen contract is unchanged, and the account pages match no
+   contract keyword. `shared/e2e/check-recipe.py` (`USER_STEP`) fails the
+   E2E for any of the three that hands fisherman no user.
 5. **Store and tour assets**: only worth it where the desktop has a place
    for artwork. Every resolver already resolves the keys, so this is view
    work only. KDE and COSMIC now show `welcome_image` and

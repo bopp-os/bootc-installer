@@ -26,6 +26,17 @@ struct Recipe {
     // true makes bootc boot the installed system with selinux=0. Keep SELinux on.
     bool selinuxDisabled = false;
     QString hostname;            // likewise: branding default_hostname
+    // The account fisherman creates (the schema's `user`). An empty username
+    // leaves the whole block out, which fisherman reads as "create no user";
+    // the account step holds Next until one is typed. The password reaches
+    // fisherman only on stdin, like the passphrase.
+    struct {
+        QString username;
+        QString fullname;
+        QString password;
+        // The first user administers the machine, as on every frontend.
+        QStringList groups{QStringLiteral("wheel")};
+    } user;
     // fisherman's probe says the host booted from live media: an empty image
     // installs the running system, and is left out of the JSON.
     bool liveMode = false;

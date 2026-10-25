@@ -52,7 +52,10 @@ a `SwipeView`. `src/components/setupmodule.h` is deliberately a near-copy of
 KDE KISS's `SetupModule`, so the shape is upstream's — follow it when adding a
 step rather than inventing a new one.
 
-Steps: welcome → disk → encryption → confirm → progress → done.
+Steps: welcome → disk → encryption → account → confirm → progress → done.
+The account step writes the recipe's `user` block (groups `["wheel"]`)
+and is required: there is no image catalog here to say an image creates
+its own first user.
 
 ### QML gotchas already paid for
 
@@ -91,13 +94,14 @@ live media (the probe's `live.is_live`, `InstallerController.isLive`)
 
 ## Validation is fisherman's
 
-The hostname, filesystem and encryption rules are `fisherman validate
---json --partial -` (`src/validate.{h,cpp}`). The controller sends those
-fields on stdin 300 ms after a change and exposes `hostnameProblem` and
-`encryptionProblem`, worded by the copy key `validate_<code>`. The
-encryption step shows its problem and holds Next on it; the confirm step
-shows the hostname's. Only the passphrase confirmation is a rule of this
-frontend. Do not add a rule of your own to `Recipe::validationError()`.
+The hostname, username, filesystem and encryption rules are `fisherman
+validate --json --partial -` (`src/validate.{h,cpp}`). The controller
+sends those fields on stdin 300 ms after a change (the username, never
+the user's password) and exposes `hostnameProblem`, `encryptionProblem`
+and `usernameProblem`, worded by the copy key `validate_<code>`. The
+encryption and account steps show their problem and hold Next on it; the
+confirm step shows the hostname's. Only the passphrase and password
+confirmations (and requiring an account) are rules of this frontend. Do not add a rule of your own to `Recipe::validationError()`.
 
 ## Disks, TPM and minimum requirements
 

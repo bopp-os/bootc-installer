@@ -26,7 +26,7 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 REAL = "/usr/local/lib/tuna-e2e/fisherman.real"
 # Frontends whose wizard has a required account step: their recipe must
 # create a user, in wheel, or the installed system has nobody to log in as.
-USER_STEP = {"cosmic", "niri"}
+USER_STEP = {"cosmic", "kde", "niri"}
 
 
 def main():

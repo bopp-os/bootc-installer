@@ -17,6 +17,7 @@
 #include <QJsonObject>
 #include <QProcess>
 #include <QProcessEnvironment>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QUrl>
@@ -35,6 +36,10 @@ private slots:
     void recipeValidation_data();
     void recipeValidation();
     void recipeJsonRoundTrip();
+    void recipeUserBlock();
+    void recipeUserOmittedWithoutUsername();
+    void controllerAccountFields();
+    void validateUsernameProblem();
     void brandingFixtures();
     void brandingLogoFixtures();
     void brandingLogoSourceEscapesFilenames();
@@ -231,6 +236,117 @@ void BackendTest::recipeJsonRoundTrip()
     QCOMPARE(restored.hostname, original.hostname);
     QCOMPARE(restored.encryption.type, original.encryption.type);
     QCOMPARE(restored.encryption.passphrase, original.encryption.passphrase);
+
+    Recipe withUser = original;
+    withUser.user.username = QStringLiteral("alex");
+    withUser.user.fullname = QStringLiteral("Alex Example");
+    withUser.user.password = QStringLiteral("pw");
+    const Recipe restoredUser = Recipe::fromJson(withUser.toJson());
+    QCOMPARE(restoredUser.user.username, withUser.user.username);
+    QCOMPARE(restoredUser.user.fullname, withUser.user.fullname);
+    QCOMPARE(restoredUser.user.password, withUser.user.password);
+    QCOMPARE(restoredUser.user.groups, QStringList{QStringLiteral("wheel")});
+}
+
+// The schema's `user` block, the way XFCE's build_recipe writes it:
+// username, fullname, password and groups ["wheel"].
+void BackendTest::recipeUserBlock()
+{
+    Recipe recipe;
+    recipe.disk = QStringLiteral("/dev/vda");
+    recipe.user.username = QStringLiteral("alex");
+    recipe.user.fullname = QStringLiteral("Alex Example");
+    recipe.user.password = QStringLiteral("s3cret");
+
+    const QJsonObject json = recipe.toJson();
+    QVERIFY(json.contains(QStringLiteral("user")));
+    const QJsonObject user = json.value(QStringLiteral("user")).toObject();
+    QCOMPARE(user.keys(), (QStringList{QStringLiteral("fullname"), QStringLiteral("groups"),
+                                       QStringLiteral("password"), QStringLiteral("username")}));
+    QCOMPARE(user.value(QStringLiteral("username")).toString(), QStringLiteral("alex"));
+    QCOMPARE(user.value(QStringLiteral("fullname")).toString(), QStringLiteral("Alex Example"));
+    QCOMPARE(user.value(QStringLiteral("password")).toString(), QStringLiteral("s3cret"));
+    QCOMPARE(user.value(QStringLiteral("groups")).toArray(), QJsonArray{QStringLiteral("wheel")});
+
+    // An empty full name is still written (the schema allows it, and XFCE
+    // writes it the same way); fisherman then leaves the GECOS field empty.
+    recipe.user.fullname.clear();
+    QVERIFY(recipe.toJson().value(QStringLiteral("user")).toObject()
+                .value(QStringLiteral("fullname")).toString().isEmpty());
+}
+
+void BackendTest::recipeUserOmittedWithoutUsername()
+{
+    // No username, no block: fisherman reads an absent `user` as "create no
+    // account", and a block with an empty username the same way, so the
+    // recipe carries neither the block nor a stray password.
+    QVERIFY(!Recipe{}.toJson().contains(QStringLiteral("user")));
+
+    Recipe recipe;
+    recipe.user.fullname = QStringLiteral("Alex Example");
+    recipe.user.password = QStringLiteral("left over");
+    const QJsonObject json = recipe.toJson();
+    QVERIFY(!json.contains(QStringLiteral("user")));
+    QVERIFY(!QJsonDocument(json).toJson().contains("left over"));
+
+    QCOMPARE(Recipe::fromJson(QJsonObject{}).user.groups, QStringList{QStringLiteral("wheel")});
+}
+
+void BackendTest::controllerAccountFields()
+{
+    InstallerController c;
+    QVERIFY(c.username().isEmpty());
+    QSignalSpy changed(&c, &InstallerController::recipeChanged);
+    c.setUsername(QStringLiteral("alex"));
+    c.setFullname(QStringLiteral("Alex Example"));
+    c.setUserPassword(QStringLiteral("pw"));
+    QCOMPARE(changed.count(), 3);
+    c.setUsername(QStringLiteral("alex"));
+    QCOMPARE(changed.count(), 3);
+    QCOMPARE(c.username(), QStringLiteral("alex"));
+    QCOMPARE(c.fullname(), QStringLiteral("Alex Example"));
+    QCOMPARE(c.userPassword(), QStringLiteral("pw"));
+
+    // The account step's field goes to `validate --json --partial`: the
+    // username only. fisherman has no rule for the rest, and the password
+    // has no business on a validate call.
+    const QJsonObject partial = QJsonDocument::fromJson(c.partialRecipe()).object();
+    QCOMPARE(partial.value(QStringLiteral("user")).toObject(),
+             (QJsonObject{{QStringLiteral("username"), QStringLiteral("alex")}}));
+    QVERIFY(!c.partialRecipe().contains("pw\""));
+}
+
+void BackendTest::validateUsernameProblem()
+{
+#ifndef VALIDATE_GOLDENS_DIR
+    QSKIP("no goldens");
+#else
+    QFile golden(QStringLiteral(VALIDATE_GOLDENS_DIR) + QStringLiteral("/partial-user.golden"));
+    if (!golden.open(QIODevice::ReadOnly))
+        QSKIP("the fisherman submodule is not checked out");
+    const QByteArray answer = golden.readAll();
+
+    InstallerController c;
+    QVERIFY(c.usernameProblem().isEmpty());
+    c.applyValidateAnswer(answer);
+    QCOMPARE(c.usernameProblem(), c.text(QStringLiteral("validate_username_reserved")));
+    QVERIFY(!c.usernameProblem().isEmpty());
+    // A username problem is the account step's alone.
+    QVERIFY(c.hostnameProblem().isEmpty());
+    QVERIFY(c.encryptionProblem().isEmpty());
+
+    // Every username code fisherman has reads a copy line.
+    for (const char *code : {"username_too_long", "username_invalid_start",
+                             "username_invalid_char", "username_reserved"}) {
+        c.applyValidateAnswer(QStringLiteral(
+            R"({"protocol_version":1,"valid":false,"errors":[{"field":"user.username","code":"%1","message":"m"}]})")
+                                  .arg(QLatin1String(code)).toUtf8());
+        QVERIFY2(c.usernameProblem() != QStringLiteral("m"), code);
+        QCOMPARE(c.usernameProblem(), c.text(QStringLiteral("validate_") + QLatin1String(code)));
+    }
+    c.applyValidateAnswer(R"({"protocol_version":1,"valid":true,"errors":[]})");
+    QVERIFY(c.usernameProblem().isEmpty());
+#endif
 }
 
 static QJsonObject readJsonObject(const QString &path)
