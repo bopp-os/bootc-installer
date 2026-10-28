@@ -31,6 +31,11 @@ def test_the_unprivileged_command_is_the_install_binary():
     assert fisherman_runner.probe_argv(in_flatpak=False)[-2:] == ["probe", "--json"]
 
 
+def test_native_path_prefers_the_packaged_binary():
+    assert fisherman_runner.native_path(lambda p: p == "/usr/bin/fisherman") == "/usr/bin/fisherman"
+    assert fisherman_runner.native_path(lambda p: False) == "/usr/local/bin/fisherman"
+
+
 def test_no_live_detection_from_ostree_booted():
     assert not hasattr(fisherman_runner, "LIVE_ISO")
 

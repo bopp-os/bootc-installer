@@ -42,6 +42,17 @@ HOST_PATH = os.path.join(CACHE_DIR, "fisherman")
 LOG_PATH = os.path.join(CACHE_DIR, "fisherman-output.log")
 
 
+def native_path(exists=os.path.exists) -> str:
+    """The fisherman binary outside a Flatpak: /usr/bin when a distribution
+    package installed it there (meson's bindir), else /usr/local/bin, where a
+    manual install puts it. A fixed list, not an environment variable: the
+    path is run as root."""
+    return "/usr/bin/fisherman" if exists("/usr/bin/fisherman") else "/usr/local/bin/fisherman"
+
+
+NATIVE_PATH = native_path()
+
+
 def build_argv(
     *,
     in_flatpak: bool = IN_FLATPAK,
@@ -70,7 +81,7 @@ def build_argv(
             command = f'pkexec "{host_path}" - >"{log_path}" 2>&1; exit $?'
         return ["flatpak-spawn", "--host", "bash", "-c", command]
     escalate = "sudo" if use_sudo else "pkexec"
-    command = f'{escalate} /usr/local/bin/fisherman - >"{log_path}" 2>&1; exit $?'
+    command = f'{escalate} {NATIVE_PATH} - >"{log_path}" 2>&1; exit $?'
     return ["bash", "-c", command]
 
 
@@ -85,7 +96,7 @@ def fisherman_argv(
     it first (stage_on_host)."""
     if in_flatpak:
         return ["flatpak-spawn", "--host", host_path]
-    return ["/usr/local/bin/fisherman"]
+    return [NATIVE_PATH]
 
 
 def probe_argv(
