@@ -200,7 +200,7 @@ def _count_leaves(nodes: list) -> int:
     """Recursively count selectable leaf image nodes in the tree."""
     count = 0
     for node in nodes:
-        if "imgref" in node:
+        if "imgref" in node or "tag" in node:   # "tag" is the registry:tag shorthand
             count += 1
         else:
             count += _count_leaves(node.get("children", []))

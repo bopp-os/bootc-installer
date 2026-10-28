@@ -262,6 +262,11 @@ class TestCountLeaves(unittest.TestCase):
         ]
         self.assertEqual(_count_leaves(nodes), 3)
 
+    def test_tag_shorthand_leaves_are_counted(self):
+        nodes = [{"name": "Plasma", "registry": "ghcr.io/example/plasma",
+                  "children": [{"name": "v3", "tag": "v3"}, {"name": "v4", "tag": "v4"}]}]
+        self.assertEqual(_count_leaves(nodes), 2)
+
     def test_nested_groups_count_recursively(self):
         nodes = [
             {
