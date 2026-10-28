@@ -55,8 +55,8 @@
       "sources": [
         {
           "type": "git",
-          "url": "https://github.com/tuna-os/fisherman.git",
-          "commit": "02ac7097abb07a206479ea84a559c41db12bf629"
+          "url": "https://github.com/bopp-os/fisherman.git",
+          "commit": "dd24e6d8c9d18a085eb8a11f8372812cd11887b6"
         }
       ]
     },

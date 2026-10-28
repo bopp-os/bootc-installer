@@ -189,6 +189,7 @@ def test_no_manifests_fails(tmp_path):
     ("https://github.com/tuna-os/fisherman", True),
     ("https://github.com/tuna-os/fisherman/", True),
     ("git@github.com:tuna-os/fisherman.git", True),
+    ("https://github.com/bopp-os/fisherman.git", True),
     ("https://github.com/tuna-os/fisherman-fork.git", False),
     ("https://github.com/someone/fisherman.git", False),
     ("https://gitlab.com/tuna-os/fisherman.git", False),

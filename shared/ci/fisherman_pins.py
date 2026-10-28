@@ -14,7 +14,8 @@ result.
 A manifest is a Flatpak app manifest when its JSON is an object with
 "modules" and an "app-id" or "id"; other JSON files there (cargo-sources.json)
 are not looked at. In each one the fisherman source is found by its URL
-(github.com/tuna-os/fisherman, any scheme, with or without .git), never by
+(github.com/tuna-os/fisherman, or the bopp-os fork the BoppOS branch pins,
+any scheme, with or without .git), never by
 module or frontend name, anywhere in the module tree. An app manifest with no
 such source, or with more than one, is an error: nothing is written and the
 script exits non-zero, so a bump never goes out with a pin silently left
@@ -40,7 +41,7 @@ MANIFEST_GLOB = os.path.join("frontends", "*", "flatpak", "*.json")
 SUBMODULE_PATH = "fisherman"
 _SHA_RE = re.compile(r"[0-9a-f]{40}")
 _FISHERMAN_URL_RE = re.compile(
-    r"^(?:https?://|ssh://git@|git@)?github\.com[/:]tuna-os/fisherman(?:\.git)?/?$",
+    r"^(?:https?://|ssh://git@|git@)?github\.com[/:](?:tuna-os|bopp-os)/fisherman(?:\.git)?/?$",
     re.IGNORECASE,
 )
 

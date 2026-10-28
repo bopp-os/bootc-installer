@@ -125,6 +125,19 @@
       "type": "string",
       "description": "Path, relative to the target root, of the writable /var for flatpaks. Empty = fisherman auto-detects."
     },
+    "skipFlatpaks": {
+      "type": "boolean",
+      "default": false,
+      "description": "Turn the Flatpak step into a no-op: nothing is copied from the host and the fallback set is not downloaded. For images that ship their own apps."
+    },
+    "kernelArgs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Extra kernel arguments for the installed system, passed to bootc install as one --karg each."
+    },
     "user": {
       "type": "object",
       "description": "Account to create. An empty username skips the step.",
