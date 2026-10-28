@@ -152,7 +152,15 @@ class BootcDefaultKeyboard(Adw.Bin):
                 r"Czech (with <\|> key)"
             )
 
-        for keyboard_title, content in all_keyboard_layouts.items():
+        # The plain layouts people use most come first; the rest keep their order.
+        common = ["us", "gb", "de", "fr", "es", "pt", "it", "ru", "se", "no"]
+        ordered = sorted(
+            all_keyboard_layouts.items(),
+            key=lambda item: common.index(item[1]["layout"])
+            if item[1]["layout"] in common and not item[1]["variant"] else len(common),
+        )
+
+        for keyboard_title, content in ordered:
             keyboard_key = content["key"]
             keyboard_country = content["country"]
             keyboard_layout = content["layout"]
