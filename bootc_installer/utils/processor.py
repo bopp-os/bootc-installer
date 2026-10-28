@@ -331,6 +331,14 @@ class Processor:
                 raise ValueError(f"{key} must be a string")  # noqa: TRY004 - invalid serialized recipe, surfaced in UI
         if bootloader not in ("", "grub2", "systemd"):
             raise ValueError(f"Unsupported bootloader: {bootloader!r}")
+        # Images that ship their own apps turn off fisherman's fallback Flatpak
+        # set; kernelArgs become one `bootc install --karg` each.
+        skip_flatpaks = field("skip_flatpaks", "skipFlatpaks", "skip_flatpaks", False)
+        if not isinstance(skip_flatpaks, bool):
+            raise ValueError("skipFlatpaks must be a boolean")  # noqa: TRY004 - invalid serialized recipe, surfaced in UI
+        kernel_args = field("kernel_args", "kernelArgs", "kernel_args", [])
+        if not isinstance(kernel_args, list) or not all(isinstance(k, str) and k for k in kernel_args):
+            raise ValueError("kernelArgs must be a list of non-empty strings")
         # Image/backend compatibility remains fisherman's validation authority.
         # Preserve unsupported imageType values so its structured validation can
         # reject them; never turn an unknown backend into the bootc default.
@@ -400,6 +408,10 @@ class Processor:
             recipe["imageType"] = image_type
         if flatpak_var_path:
             recipe["flatpakVarPath"] = flatpak_var_path
+        if skip_flatpaks:
+            recipe["skipFlatpaks"] = True
+        if kernel_args:
+            recipe["kernelArgs"] = kernel_args
         # Offline image stores: only when the ISO's recipe names them. Left
         # out, fisherman exposes the stores it finds on the host itself
         # (tuna-os/fisherman#276); [] would turn that off.

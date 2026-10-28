@@ -521,6 +521,29 @@ class TestComposefs:
         r = _load(path)
         assert r["flatpakVarPath"] == "state/os/default/var"
 
+    def test_skip_flatpaks_and_kernel_args_absent_by_default(self):
+        r = _load(Processor.gen_install_recipe("log", _auto_finals(), _SYS_RECIPE))
+        assert "skipFlatpaks" not in r
+        assert "kernelArgs" not in r
+
+    def test_skip_flatpaks_and_kernel_args_from_system_recipe(self):
+        sys_recipe = {"skipFlatpaks": True, "kernelArgs": ["quiet", "splash"]}
+        r = _load(Processor.gen_install_recipe("log", _auto_finals(), sys_recipe))
+        assert r["skipFlatpaks"] is True
+        assert r["kernelArgs"] == ["quiet", "splash"]
+
+    def test_skip_flatpaks_and_kernel_args_from_image_metadata(self):
+        image = "ghcr.io/bopp-os/cachyos-plasma:znver4"
+        sys_recipe = {"images": [{"imgref": image, "skip_flatpaks": True,
+                                  "kernel_args": ["amd_pstate=active"]}]}
+        r = _load(Processor.gen_install_recipe("log", _auto_finals(image=image), sys_recipe))
+        assert r["skipFlatpaks"] is True
+        assert r["kernelArgs"] == ["amd_pstate=active"]
+
+    def test_kernel_args_must_be_a_list_of_strings(self):
+        with pytest.raises(ValueError, match="kernelArgs"):
+            Processor.gen_install_recipe("log", _auto_finals(), {"kernelArgs": "quiet"})
+
 
 # ── Misc / edge cases ──────────────────────────────────────────────────────────
 
