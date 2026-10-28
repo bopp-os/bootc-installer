@@ -41,6 +41,16 @@ template $BootcWindow: Adw.ApplicationWindow {
         }
 
         [end]
+        Button btn_theme {
+          icon-name: "weather-clear-night-symbolic";
+          tooltip-text: _("Switch between dark and light");
+
+          styles [
+            "flat",
+          ]
+        }
+
+        [end]
         Button btn_about {
           icon-name: "help-about-symbolic";
           tooltip-text: _("About");

@@ -63,6 +63,7 @@ class BootcWindow(Adw.ApplicationWindow):
     btn_next = Gtk.Template.Child()
     btn_exit = Gtk.Template.Child()
     btn_about = Gtk.Template.Child()
+    btn_theme = Gtk.Template.Child()
     btn_credits = Gtk.Template.Child()
     toasts = Gtk.Template.Child()
 
@@ -114,6 +115,7 @@ class BootcWindow(Adw.ApplicationWindow):
         self.btn_next.connect("clicked", self.__on_header_next)
         self.btn_exit.connect("clicked", self.__on_exit_clicked)
         self.btn_about.connect("clicked", self.__on_about_clicked)
+        self.btn_theme.connect("clicked", self.__on_theme_clicked)
         self.btn_credits.connect("clicked", self.__on_credits_clicked)
         self.connect("close-request", self.__on_close_request)
         self.carousel.connect("page-changed", self.__on_page_changed)
@@ -434,6 +436,12 @@ class BootcWindow(Adw.ApplicationWindow):
 
     def __on_recovery_key_acknowledged(self, *args):
         self.__go_to_page(self.__view_done)
+
+    def __on_theme_clicked(self, _widget):
+        manager = Adw.StyleManager.get_default()
+        manager.set_color_scheme(
+            Adw.ColorScheme.FORCE_LIGHT if manager.get_dark()
+            else Adw.ColorScheme.FORCE_DARK)
 
     def __on_about_clicked(self, *args):
         # Vendor and website come from the branding contract (branding.json,
