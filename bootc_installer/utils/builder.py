@@ -24,6 +24,9 @@ from bootc_installer.defaults.conn_check import BootcDefaultConnCheck
 from bootc_installer.defaults.disk import BootcDefaultDisk
 from bootc_installer.defaults.encryption import BootcDefaultEncryption
 from bootc_installer.defaults.image import BootcDefaultImage
+from bootc_installer.defaults.keyboard import BootcDefaultKeyboard
+from bootc_installer.defaults.language import BootcDefaultLanguage
+from bootc_installer.defaults.timezone import BootcDefaultTimezone
 from bootc_installer.defaults.user import BootcDefaultUsers
 from bootc_installer.defaults.welcome import BootcDefaultWelcome
 from bootc_installer.defaults.qr_companion import BootcDefaultQrCompanion
@@ -39,6 +42,9 @@ templates = {
     "disk": BootcDefaultDisk,
     "encryption": BootcDefaultEncryption,
     "image": BootcDefaultImage,
+    "language": BootcDefaultLanguage,
+    "keyboard": BootcDefaultKeyboard,
+    "timezone": BootcDefaultTimezone,
     "user": BootcDefaultUsers,
     "qr_companion": BootcDefaultQrCompanion,
     "yes-no": BootcLayoutYesNo,

@@ -87,6 +87,18 @@
       "pattern": "^([a-z][a-z0-9-]{0,62})?$",
       "description": "Short lowercase distribution id that names the OEM setup paths and services on the target (/etc/<distroID>/oem/). Frontends write the branding id; fisherman uses \"bootc\" when it is empty."
     },
+    "locale": {
+      "type": "string",
+      "description": "LANG for the installed system, e.g. en_US.UTF-8. Written to /etc/locale.conf; empty leaves the image's setting."
+    },
+    "keymap": {
+      "type": "string",
+      "description": "Console keymap, e.g. us. Written to /etc/vconsole.conf; empty leaves the image's setting."
+    },
+    "timezone": {
+      "type": "string",
+      "description": "Zoneinfo name, e.g. Europe/Berlin. Linked as /etc/localtime; empty leaves the image's setting."
+    },
     "selinuxDisabled": {
       "type": "boolean",
       "default": false,

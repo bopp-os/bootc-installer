@@ -412,6 +412,17 @@ class Processor:
             recipe["skipFlatpaks"] = True
         if kernel_args:
             recipe["kernelArgs"] = kernel_args
+
+        # --- Locale, keymap, timezone (the language, keyboard and timezone pages) ---
+        language = merged.get("language")
+        if isinstance(language, str) and language:
+            recipe["locale"] = language if "." in language else f"{language}.UTF-8"
+        keyboard = merged.get("keyboard")
+        if isinstance(keyboard, list) and keyboard and isinstance(keyboard[0], dict) and keyboard[0].get("layout"):
+            recipe["keymap"] = keyboard[0]["layout"]
+        timezone = merged.get("timezone")
+        if isinstance(timezone, dict) and timezone.get("region") and timezone.get("zone"):
+            recipe["timezone"] = f"{timezone['region']}/{timezone['zone']}"
         # Offline image stores: only when the ISO's recipe names them. Left
         # out, fisherman exposes the stores it finds on the host itself
         # (tuna-os/fisherman#276); [] would turn that off.
