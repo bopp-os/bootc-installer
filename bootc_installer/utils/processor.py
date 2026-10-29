@@ -413,6 +413,12 @@ class Processor:
         if kernel_args:
             recipe["kernelArgs"] = kernel_args
 
+        # --- First-run marker: tells the first boot whether an account exists (the distro opts in) ---
+        if sys_recipe.get("firstRunMarker"):
+            user_info = merged.get("user")
+            has_user = isinstance(user_info, dict) and bool(user_info.get("username"))
+            recipe["firstRun"] = "welcome" if has_user else "oobe"
+
         # --- Locale, keymap, timezone (the language, keyboard and timezone pages) ---
         language = merged.get("language")
         if isinstance(language, str) and language:

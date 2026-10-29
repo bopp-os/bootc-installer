@@ -87,6 +87,11 @@
       "pattern": "^([a-z][a-z0-9-]{0,62})?$",
       "description": "Short lowercase distribution id that names the OEM setup paths and services on the target (/etc/<distroID>/oem/). Frontends write the branding id; fisherman uses \"bootc\" when it is empty."
     },
+    "firstRun": {
+      "type": "string",
+      "enum": ["", "welcome", "oobe"],
+      "description": "Writes /var/lib/<distroID>/first-run (mode=welcome when an account was created, mode=oobe when not) so the first boot knows how to start."
+    },
     "locale": {
       "type": "string",
       "description": "LANG for the installed system, e.g. en_US.UTF-8. Written to /etc/locale.conf; empty leaves the image's setting."
