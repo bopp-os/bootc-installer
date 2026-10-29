@@ -148,6 +148,8 @@ if _aliases:
 _IMAGE_TREE = _MANIFEST["images"]
 _DEFAULT_IMAGE = _MANIFEST.get("default_image", "")
 _FALLBACK_FLATPAKS = _MANIFEST["fallback_flatpaks"]
+# Settings a typed-in (custom) image gets: the catalog file can say what its distro needs (user creation, bootloader, ...).
+_CUSTOM_DEFAULTS = _MANIFEST.get("custom_defaults", {})
 _APP_NAME = _MANIFEST.get("app_name", "bootc Installer")
 
 
@@ -486,14 +488,14 @@ class BootcDefaultImage(Adw.Bin):
             self.__selected_imgref = None
             self.__selected_icon = None
             self.__selected_carousel = None
-            self.__selected_needs_user_creation = False
-            self.__selected_composefs_backend = False
+            self.__selected_needs_user_creation = bool(_CUSTOM_DEFAULTS.get("needs_user_creation", False))
+            self.__selected_composefs_backend = bool(_CUSTOM_DEFAULTS.get("composefs", False))
             self.__selected_image_type = "bootc"
-            self.__selected_bootloader = ""
-            self.__selected_image_filesystem = ""
+            self.__selected_bootloader = _CUSTOM_DEFAULTS.get("bootloader", "")
+            self.__selected_image_filesystem = _CUSTOM_DEFAULTS.get("filesystem", "")
             self.__selected_pretty_name = None
-            self.__selected_default_hostname = ""
-            self.__selected_filesystems = []
+            self.__selected_default_hostname = _CUSTOM_DEFAULTS.get("default_hostname", "")
+            self.__selected_filesystems = list(_CUSTOM_DEFAULTS.get("filesystems", []))
         self.__update_btn_next()
 
     def __on_url_changed(self, entry):
@@ -585,12 +587,14 @@ class BootcDefaultImage(Adw.Bin):
                 "pretty_name": _imgref_to_pretty_name(url),
                 "flatpaks": _FALLBACK_FLATPAKS,
                 "carousel": None,
-                "needs_user_creation": False,
-                "composefs_backend": False,
+                "needs_user_creation": self.__selected_needs_user_creation,
+                "composefs_backend": self.__selected_composefs_backend,
                 "image_type": "bootc",
-                "bootloader": "",
-                "image_filesystem": "",
+                "bootloader": self.__selected_bootloader,
+                "image_filesystem": self.__selected_image_filesystem,
                 "icon": None,
+                "default_hostname": self.__selected_default_hostname,
+                "supported_filesystems": self.__selected_filesystems,
             }
         return {
             "selected_image": self.__selected_imgref,
