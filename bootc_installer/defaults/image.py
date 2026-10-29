@@ -298,7 +298,7 @@ class BootcDefaultImage(Adw.Bin):
         self.__selected_needs_user_creation = False
         self.__selected_composefs_backend = False  # image requires composefs backend
         self.__selected_image_type = "bootc"        # "bootc" or "ostree"
-        self.__selected_bootloader = ""             # "grub2", "systemd", or "" (default)
+        self.__selected_bootloader = ""             # "grub2", "systemd", "grub-external", or "" (default)
         self.__selected_image_filesystem = ""       # filesystem required by image, or ""
         self.__selected_icon = None      # icon spec for selected image (str or None)
         self.__selected_pretty_name = _imgref_to_pretty_name(_DEFAULT_IMAGE)

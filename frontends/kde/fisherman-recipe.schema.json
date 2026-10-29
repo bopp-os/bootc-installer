@@ -65,7 +65,7 @@
     },
     "bootloader": {
       "type": "string",
-      "enum": ["", "grub2", "systemd"],
+      "enum": ["", "grub2", "systemd", "grub-external"],
       "description": "Explicit bootloader selection"
     },
     "composeFsBackend": {

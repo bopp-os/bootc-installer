@@ -329,7 +329,7 @@ class Processor:
                            ("bootloader", bootloader), ("flatpakVarPath", flatpak_var_path)):
             if not isinstance(value, str):
                 raise ValueError(f"{key} must be a string")  # noqa: TRY004 - invalid serialized recipe, surfaced in UI
-        if bootloader not in ("", "grub2", "systemd"):
+        if bootloader not in ("", "grub2", "systemd", "grub-external"):
             raise ValueError(f"Unsupported bootloader: {bootloader!r}")
         # Images that ship their own apps turn off fisherman's fallback Flatpak
         # set; kernelArgs become one `bootc install --karg` each.
