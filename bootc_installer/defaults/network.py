@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import logging
+import socket
 import time
 import subprocess
 from gettext import gettext as _
@@ -279,7 +280,7 @@ class BootcDefaultNetwork(Adw.Bin):
                 title=_("Network settings are unavailable"),
                 subtitle=_("NetworkManager is not running, so connections cannot be listed here."),
             ))
-            self.btn_next.connect("clicked", self.__window.next)
+            self.btn_next.connect("clicked", self.__on_next_clicked)
             self.set_btn_next(True)
             return
         self.delta = False
@@ -309,7 +310,32 @@ class BootcDefaultNetwork(Adw.Bin):
 
         self.__nm_client.connect("device-added", self.__add_new_device)
         self.__nm_client.connect("device-added", self.__remove_device)
-        self.btn_next.connect("clicked", self.__window.next)
+        self.btn_next.connect("clicked", self.__on_next_clicked)
+
+    def __on_next_clicked(self, *args):
+        """Continue once the image registry can be reached; otherwise stay on this page and say why. (This replaces
+        a separate connection-check page that flashed by on its own when the check passed.)"""
+        self.btn_next.set_sensitive(False)
+
+        def reachable():
+            # ghcr.io is where the images come from; 8.8.8.8:53 tells "no internet" apart from "ghcr.io blocked".
+            for host, port in (("ghcr.io", 443), ("8.8.8.8", 53)):
+                try:
+                    socket.create_connection((host, port), timeout=5).close()
+                    return True
+                except OSError:
+                    continue
+            return False
+
+        def done(ok, *args):
+            self.btn_next.set_sensitive(True)
+            if ok:
+                self.__window.next()
+            else:
+                logger.error("Connection check failed: could not reach ghcr.io:443 or 8.8.8.8:53")
+                self.__window.toast(_("No internet connection. Connect to a network, then press Next again."), timeout=6)
+
+        RunAsync(reachable, done)
 
     @property
     def step_id(self):
