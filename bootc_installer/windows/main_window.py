@@ -120,6 +120,12 @@ class BootcWindow(Adw.ApplicationWindow):
         # The keyboard button only exists where an on-screen keyboard (squeekboard) is on the session bus.
         self.__osk_bus = None
         self.btn_keyboard.connect("toggled", self.__on_keyboard_toggled)
+        # A field that selects its text when it gains focus loses what was typed on the next key press whenever the
+        # on-screen keyboard makes the window re-take focus.
+        try:
+            Gtk.Settings.get_default().set_property("gtk-entry-select-on-focus", False)
+        except TypeError:
+            logger.debug("gtk-entry-select-on-focus is not available in this GTK")
         # The text field last typed in, so that the keyboard button can hand focus back to it.
         self.__last_text = None
         self.connect("notify::focus-widget", self.__on_focus_widget)
