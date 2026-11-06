@@ -712,6 +712,11 @@ class TestBootcDefaultImagePureLogic(unittest.TestCase):
         widget = self._make_widget()
         widget.row_custom.get_expanded.return_value = True
         widget.image_url_entry.get_text.return_value = "ghcr.io/example/custom-dx:stable"
+        # What opening the custom row sets with no custom_defaults in the catalog.
+        widget._BootcDefaultImage__selected_needs_user_creation = False
+        widget._BootcDefaultImage__selected_composefs_backend = False
+        widget._BootcDefaultImage__selected_bootloader = ""
+        widget._BootcDefaultImage__selected_image_filesystem = ""
 
         finals = self.cls.get_finals(widget)
 

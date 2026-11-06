@@ -13,6 +13,10 @@ _STUBBED_MODULES = (
     "bootc_installer.defaults.disk",
     "bootc_installer.defaults.encryption",
     "bootc_installer.defaults.image",
+    "bootc_installer.defaults.keyboard",
+    "bootc_installer.defaults.language",
+    "bootc_installer.defaults.network",
+    "bootc_installer.defaults.timezone",
     "bootc_installer.defaults.user",
     "bootc_installer.defaults.welcome",
     "bootc_installer.defaults.qr_companion",
@@ -77,6 +81,11 @@ def _import_builder_fresh(default_image="ghcr.io/projectbluefin/bluefin:latest")
         _DEFAULT_IMAGE=default_image,
         _find_icon_for_imgref=find_icon,
     )
+    for name in ("Keyboard", "Language", "Network", "Timezone"):
+        _stub_module(
+            f"bootc_installer.defaults.{name.lower()}",
+            **{f"BootcDefault{name}": type(f"BootcDefault{name}", (), {})},
+        )
     _stub_module(
         "bootc_installer.defaults.user",
         BootcDefaultUsers=type("BootcDefaultUsers", (), {}),
