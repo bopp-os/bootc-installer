@@ -131,6 +131,8 @@ class BootcWindow(Adw.ApplicationWindow):
         self.__last_text = None
         self.connect("notify::focus-widget", self.__on_focus_widget)
         self.connect("notify::is-active", lambda *_: logger.info("Window active: %s", self.is_active()))
+        # Dialogs open and close as windows of their own: recheck whether the keyboard may stay up.
+        Gtk.Window.get_toplevels().connect("items-changed", lambda *_: GLib.idle_add(self.__osk_refresh))
         Gio.bus_watch_name(
             Gio.BusType.SESSION, "sm.puri.OSK0", Gio.BusNameWatcherFlags.NONE,
             self.__on_osk_appeared, self.__on_osk_vanished,
@@ -271,7 +273,7 @@ class BootcWindow(Adw.ApplicationWindow):
     def __clear_text_focus(self):
         if self.btn_keyboard.get_active():
             self.__focus_text_for_keyboard()
-            self.__osk_set_visible(True)
+            self.__osk_refresh()
         elif isinstance(self.get_focus(), Gtk.Editable):
             self.set_focus(None)
         return GLib.SOURCE_REMOVE
@@ -316,7 +318,7 @@ class BootcWindow(Adw.ApplicationWindow):
         if self.btn_keyboard.get_active():
             # The button means "keyboard stays up until I press it again": squeekboard hides itself when the field
             # that had focus goes away (Next, Back), so ask for it again.
-            GLib.idle_add(self.__osk_set_visible, True)
+            GLib.idle_add(self.__osk_refresh)
         if isinstance(widget, Gtk.Editable):
             self.__last_text = widget
 
@@ -329,12 +331,27 @@ class BootcWindow(Adw.ApplicationWindow):
             )
         return GLib.SOURCE_REMOVE
 
+    def __osk_refresh(self):
+        """Show the keyboard while the button is on, except over a dialog with no text field: a dialog is a window of
+        its own that does not move out of the keyboard's way, so the keyboard would cover its buttons."""
+        if self.__osk_bus is None:
+            return GLib.SOURCE_REMOVE
+        visible = self.btn_keyboard.get_active()
+        if visible:
+            toplevels = Gtk.Window.get_toplevels()
+            dialogs = [toplevels.get_item(i) for i in range(toplevels.get_n_items())]
+            dialogs = [w for w in dialogs if w is not self]
+            if dialogs and not any(self.__first_editable(w) is not None for w in dialogs):
+                visible = False
+        self.__osk_set_visible(visible)
+        return GLib.SOURCE_REMOVE
+
     def __on_keyboard_toggled(self, button):
         if self.__osk_bus is None:
             return
         if button.get_active():
             GLib.idle_add(self.__focus_text_for_keyboard)
-        self.__osk_set_visible(button.get_active())
+        self.__osk_refresh()
 
     def __on_page_changed(self, *args):
         cur_index = self.carousel.get_position()
