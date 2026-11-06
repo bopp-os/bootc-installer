@@ -26,6 +26,7 @@ from bootc_installer.defaults.encryption import BootcDefaultEncryption
 from bootc_installer.defaults.image import BootcDefaultImage
 from bootc_installer.defaults.keyboard import BootcDefaultKeyboard
 from bootc_installer.defaults.language import BootcDefaultLanguage
+from bootc_installer.defaults.network import BootcDefaultNetwork
 from bootc_installer.defaults.timezone import BootcDefaultTimezone
 from bootc_installer.defaults.user import BootcDefaultUsers
 from bootc_installer.defaults.welcome import BootcDefaultWelcome
@@ -38,6 +39,7 @@ logger = logging.getLogger("Installer::Builder")
 
 templates = {
     "conn-check": BootcDefaultConnCheck,
+    "network": BootcDefaultNetwork,
     "welcome": BootcDefaultWelcome,
     "disk": BootcDefaultDisk,
     "encryption": BootcDefaultEncryption,
