@@ -265,14 +265,17 @@ class BootcDefaultNetwork(Adw.Bin):
         self.__distro_info = distro_info
         self.__key = key
         self.__step = step
+        self.__step_num = step["num"]
         try:
             self.__nm_client = NM.Client.new()
         except GLib.Error as e:
-            # No NetworkManager (a dev container, a stripped image): skip the page instead of failing the installer.
+            # No NetworkManager (a dev container, a stripped image): pass over the page instead of failing the
+            # installer. The page stays in the carousel: the steps after it find their place by position, and
+            # removing it would shift them (the connection check would then fire on the image page).
             logger.warning("NetworkManager is not available (%s); skipping the network page", e)
             self.__nm_client = None
+            self.__window.carousel.connect("page-changed", self.__try_skip_page)
             return
-        self.__step_num = step["num"]
         self.delta = False
 
         self.__devices = []
@@ -307,6 +310,10 @@ class BootcDefaultNetwork(Adw.Bin):
         if idx is not None and idx != self.__step_num:
             return
 
+        if self.__nm_client is None:
+            self.__window.next()
+            return
+
         # Skip page if already connected to the internet (BOPPOS_FORCE_NETWORK_PAGE=1 shows it anyway, for testing)
         if (self.has_eth_connection or self.has_wifi_connection) and not os.environ.get("BOPPOS_FORCE_NETWORK_PAGE"):
             self.__window.next()
@@ -314,9 +321,6 @@ class BootcDefaultNetwork(Adw.Bin):
     @property
     def step_id(self):
         return self.__key
-
-    def should_show(self, context: dict) -> bool:
-        return self.__nm_client is not None
 
     def get_finals(self):
         return {}
