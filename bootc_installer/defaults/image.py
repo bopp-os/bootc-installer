@@ -559,7 +559,8 @@ class BootcDefaultImage(Adw.Bin):
     # ── Test / finals ─────────────────────────────────────────────────────────
 
     def should_show(self, context: dict) -> bool:
-        return context.get("leaf_count", 2) > 1
+        # Always shown, even with one image: the installer may preselect, never decide for the user.
+        return True
 
     @property
     def skip_screen(self) -> bool:

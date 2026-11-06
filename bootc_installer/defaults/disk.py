@@ -957,16 +957,9 @@ class BootcDefaultDisk(Adw.Bin):
         self.__window.get_application().quit()
 
     def should_show(self, context: dict) -> bool:
-        # Skip only when exactly one disk was found and pre-selected. With
-        # none, the page has to appear to explain why Install is unavailable.
-        if context.get("disk_count", 2) != 1:
-            return True
-        # One disk is picked for the user, but the page also holds the root
-        # filesystem choice: keep it when the image offers more than one.
-        for finals in context.get("finals", []):
-            if isinstance(finals, dict) and len(finals.get("supported_filesystems") or []) > 1:
-                return True
-        return False
+        # Always shown, even with one disk and one filesystem: which disk gets erased is the user's decision. The
+        # only disk is preselected, never chosen silently.
+        return True
 
     def _set_auto_partition_recipe(self, disk):
         self.__partition_recipe = build_auto_partition_recipe(disk)
