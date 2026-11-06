@@ -271,9 +271,16 @@ class BootcDefaultNetwork(Adw.Bin):
             # No NetworkManager (a dev container, a stripped image): pass over the page instead of failing the
             # installer. The page stays in the carousel: the steps after it find their place by position, and
             # removing it would shift them (the connection check would then fire on the image page).
-            logger.warning("NetworkManager is not available (%s); skipping the network page", e)
+            logger.warning("NetworkManager is not available (%s); the network page cannot list connections", e)
             self.__nm_client = None
-            self.__window.carousel.connect("page-changed", self.__try_skip_page)
+            self.advanced_group.set_visible(False)
+            self.wired_group.set_visible(False)
+            self.wireless_group.add(Adw.ActionRow(
+                title=_("Network settings are unavailable"),
+                subtitle=_("NetworkManager is not running, so connections cannot be listed here."),
+            ))
+            self.btn_next.connect("clicked", self.__window.next)
+            self.set_btn_next(True)
             return
         self.delta = False
 
@@ -303,15 +310,6 @@ class BootcDefaultNetwork(Adw.Bin):
         self.__nm_client.connect("device-added", self.__add_new_device)
         self.__nm_client.connect("device-added", self.__remove_device)
         self.btn_next.connect("clicked", self.__window.next)
-        self.__window.carousel.connect("page-changed", self.__try_skip_page)
-
-    def __try_skip_page(self, carousel=None, idx=None):
-        if idx is not None and idx != self.__step_num:
-            return
-
-        if self.__nm_client is None:
-            self.__window.next()
-            return
 
     @property
     def step_id(self):
