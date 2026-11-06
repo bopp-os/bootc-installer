@@ -118,6 +118,7 @@ class BootcWindow(Adw.ApplicationWindow):
         self.btn_about.connect("clicked", self.__on_about_clicked)
         self.btn_theme.connect("clicked", self.__on_theme_clicked)
         # The keyboard button only exists where an on-screen keyboard (squeekboard) is on the session bus.
+        self.__focus_cleared_for = None
         self.__osk_bus = None
         self.btn_keyboard.connect("toggled", self.__on_keyboard_toggled)
         # A field that selects its text when it gains focus loses what was typed on the next key press whenever the
@@ -266,6 +267,11 @@ class BootcWindow(Adw.ApplicationWindow):
         self.carousel.append(self.__view_recovery_key)
         self.carousel.append(self.__view_done)
 
+    def __clear_text_focus(self):
+        if isinstance(self.get_focus(), Gtk.Editable):
+            self.set_focus(None)
+        return GLib.SOURCE_REMOVE
+
     def __on_osk_appeared(self, connection, name, owner):
         self.__osk_bus = connection
         self.btn_keyboard.set_visible(True)
@@ -297,8 +303,11 @@ class BootcWindow(Adw.ApplicationWindow):
         logger.info("(%s) Page is changing...", getattr(page, "__gtype_name__", type(page).__name__))
 
         # A search box that takes focus by itself (language, keyboard, timezone) would raise an on-screen keyboard over the
-        # list the moment the page opens: leave focus unset until the user taps a field.
-        GLib.idle_add(self.set_focus, None)
+        # list the moment the page opens: drop that focus once per page, shortly after it opens, so that a field the
+        # user taps afterwards keeps it (this handler also runs again while pages are rebuilt).
+        if cur_index != self.__focus_cleared_for:
+            self.__focus_cleared_for = cur_index
+            GLib.timeout_add(300, self.__clear_text_focus)
 
         # Disconnect sensitivity tracking from previous page
         if self.__next_page_widget is not None:
