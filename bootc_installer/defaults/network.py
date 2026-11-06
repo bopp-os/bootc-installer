@@ -19,7 +19,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import time
 import subprocess
 from gettext import gettext as _
@@ -313,10 +312,6 @@ class BootcDefaultNetwork(Adw.Bin):
         if self.__nm_client is None:
             self.__window.next()
             return
-
-        # Skip page if already connected to the internet (BOPPOS_FORCE_NETWORK_PAGE=1 shows it anyway, for testing)
-        if (self.has_eth_connection or self.has_wifi_connection) and not os.environ.get("BOPPOS_FORCE_NETWORK_PAGE"):
-            self.__window.next()
 
     @property
     def step_id(self):
