@@ -130,6 +130,7 @@ class BootcWindow(Adw.ApplicationWindow):
         # The text field last typed in, so that the keyboard button can hand focus back to it.
         self.__last_text = None
         self.connect("notify::focus-widget", self.__on_focus_widget)
+        self.connect("notify::is-active", lambda *_: logger.info("Window active: %s", self.is_active()))
         Gio.bus_watch_name(
             Gio.BusType.SESSION, "sm.puri.OSK0", Gio.BusNameWatcherFlags.NONE,
             self.__on_osk_appeared, self.__on_osk_vanished,
@@ -268,8 +269,36 @@ class BootcWindow(Adw.ApplicationWindow):
         self.carousel.append(self.__view_done)
 
     def __clear_text_focus(self):
-        if isinstance(self.get_focus(), Gtk.Editable):
+        if self.btn_keyboard.get_active():
+            self.__focus_text_for_keyboard()
+        elif isinstance(self.get_focus(), Gtk.Editable):
             self.set_focus(None)
+        return GLib.SOURCE_REMOVE
+
+    def __first_editable(self, widget):
+        """The first visible, enabled text field in widget's tree (search boxes and entry rows), or None."""
+        if not (widget.get_visible() and widget.get_sensitive()):
+            return None
+        if isinstance(widget, Gtk.Editable):
+            return widget
+        child = widget.get_first_child()
+        while child is not None:
+            found = self.__first_editable(child)
+            if found is not None:
+                return found
+            child = child.get_next_sibling()
+        return None
+
+    def __focus_text_for_keyboard(self):
+        """With the on-screen keyboard up, a text field must have focus, or the keys go nowhere: the field in use
+        if it is on screen, else the first one on the current page."""
+        target = self.__last_text if self.__last_text is not None and self.__last_text.get_mapped() else None
+        if target is None:
+            page = self.carousel.get_nth_page(round(self.carousel.get_position()))
+            target = self.__first_editable(page) if page is not None else None
+        if target is not None:
+            target.grab_focus()
+        logger.info("Keyboard up: focus on %s", type(target).__name__ if target is not None else "no field")
         return GLib.SOURCE_REMOVE
 
     def __on_osk_appeared(self, connection, name, owner):
@@ -282,14 +311,15 @@ class BootcWindow(Adw.ApplicationWindow):
 
     def __on_focus_widget(self, *args):
         widget = self.get_focus()
+        logger.info("Focus: %s, window active: %s", type(widget).__name__, self.is_active())
         if isinstance(widget, Gtk.Editable):
             self.__last_text = widget
 
     def __on_keyboard_toggled(self, button):
         if self.__osk_bus is None:
             return
-        if self.__last_text is not None:
-            GLib.idle_add(self.__last_text.grab_focus)
+        if button.get_active():
+            GLib.idle_add(self.__focus_text_for_keyboard)
         self.__osk_bus.call(
             "sm.puri.OSK0", "/sm/puri/OSK0", "sm.puri.OSK0", "SetVisible",
             GLib.Variant("(b)", (button.get_active(),)),
