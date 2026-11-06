@@ -120,6 +120,9 @@ class BootcWindow(Adw.ApplicationWindow):
         # The keyboard button only exists where an on-screen keyboard (squeekboard) is on the session bus.
         self.__osk_bus = None
         self.btn_keyboard.connect("toggled", self.__on_keyboard_toggled)
+        # The text field last typed in, so that the keyboard button can hand focus back to it.
+        self.__last_text = None
+        self.connect("notify::focus-widget", self.__on_focus_widget)
         Gio.bus_watch_name(
             Gio.BusType.SESSION, "sm.puri.OSK0", Gio.BusNameWatcherFlags.NONE,
             self.__on_osk_appeared, self.__on_osk_vanished,
@@ -265,9 +268,16 @@ class BootcWindow(Adw.ApplicationWindow):
         self.__osk_bus = None
         self.btn_keyboard.set_visible(False)
 
+    def __on_focus_widget(self, *args):
+        widget = self.get_focus()
+        if isinstance(widget, Gtk.Editable):
+            self.__last_text = widget
+
     def __on_keyboard_toggled(self, button):
         if self.__osk_bus is None:
             return
+        if self.__last_text is not None:
+            GLib.idle_add(self.__last_text.grab_focus)
         self.__osk_bus.call(
             "sm.puri.OSK0", "/sm/puri/OSK0", "sm.puri.OSK0", "SetVisible",
             GLib.Variant("(b)", (button.get_active(),)),
