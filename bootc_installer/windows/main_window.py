@@ -271,6 +271,7 @@ class BootcWindow(Adw.ApplicationWindow):
     def __clear_text_focus(self):
         if self.btn_keyboard.get_active():
             self.__focus_text_for_keyboard()
+            self.__osk_set_visible(True)
         elif isinstance(self.get_focus(), Gtk.Editable):
             self.set_focus(None)
         return GLib.SOURCE_REMOVE
@@ -312,19 +313,28 @@ class BootcWindow(Adw.ApplicationWindow):
     def __on_focus_widget(self, *args):
         widget = self.get_focus()
         logger.info("Focus: %s, window active: %s", type(widget).__name__, self.is_active())
+        if self.btn_keyboard.get_active():
+            # The button means "keyboard stays up until I press it again": squeekboard hides itself when the field
+            # that had focus goes away (Next, Back), so ask for it again.
+            GLib.idle_add(self.__osk_set_visible, True)
         if isinstance(widget, Gtk.Editable):
             self.__last_text = widget
+
+    def __osk_set_visible(self, visible):
+        if self.__osk_bus is not None:
+            self.__osk_bus.call(
+                "sm.puri.OSK0", "/sm/puri/OSK0", "sm.puri.OSK0", "SetVisible",
+                GLib.Variant("(b)", (visible,)),
+                None, Gio.DBusCallFlags.NONE, -1, None, None,
+            )
+        return GLib.SOURCE_REMOVE
 
     def __on_keyboard_toggled(self, button):
         if self.__osk_bus is None:
             return
         if button.get_active():
             GLib.idle_add(self.__focus_text_for_keyboard)
-        self.__osk_bus.call(
-            "sm.puri.OSK0", "/sm/puri/OSK0", "sm.puri.OSK0", "SetVisible",
-            GLib.Variant("(b)", (button.get_active(),)),
-            None, Gio.DBusCallFlags.NONE, -1, None, None,
-        )
+        self.__osk_set_visible(button.get_active())
 
     def __on_page_changed(self, *args):
         cur_index = self.carousel.get_position()
