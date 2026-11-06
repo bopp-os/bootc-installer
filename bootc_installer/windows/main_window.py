@@ -66,6 +66,7 @@ class BootcWindow(Adw.ApplicationWindow):
     btn_theme = Gtk.Template.Child()
     btn_keyboard = Gtk.Template.Child()
     btn_credits = Gtk.Template.Child()
+    net_status = Gtk.Template.Child()
     toasts = Gtk.Template.Child()
 
     def __init__(self, autoinstall_recipe: str | None = None, **kwargs):
@@ -138,6 +139,7 @@ class BootcWindow(Adw.ApplicationWindow):
             self.__on_osk_appeared, self.__on_osk_vanished,
         )
         self.btn_credits.connect("clicked", self.__on_credits_clicked)
+        self.__start_net_status()
         self.connect("close-request", self.__on_close_request)
         self.carousel.connect("page-changed", self.__on_page_changed)
         self.__reconnect_update_finals()
@@ -295,6 +297,10 @@ class BootcWindow(Adw.ApplicationWindow):
     def __focus_text_for_keyboard(self):
         """With the on-screen keyboard up, a text field must have focus, or the keys go nowhere: the field in use
         if it is on screen, else the first one on the current page."""
+        focus = self.get_focus()
+        if isinstance(focus, Gtk.Editable) and focus.get_mapped():
+            # Already in a text field (such as a dialog's password field): leave it there.
+            return GLib.SOURCE_REMOVE
         target = self.__last_text if self.__last_text is not None and self.__last_text.get_mapped() else None
         if target is None:
             page = self.carousel.get_nth_page(round(self.carousel.get_position()))
@@ -303,6 +309,69 @@ class BootcWindow(Adw.ApplicationWindow):
             target.grab_focus()
         logger.info("Keyboard up: focus on %s", type(target).__name__ if target is not None else "no field")
         return GLib.SOURCE_REMOVE
+
+    def __start_net_status(self):
+        """A network icon in the top bar, on every page: wired, Wi-Fi signal, connecting, or not connected. It only
+        shows where NetworkManager is running."""
+        self.__nm = None
+        try:
+            from gi.repository import NM
+        except ImportError:
+            logger.info("libnm is not available; no network icon in the top bar")
+            return
+
+        def ready(source, result, *args):
+            try:
+                self.__nm = NM.Client.new_finish(result)
+            except GLib.Error as e:
+                logger.info("NetworkManager is not available (%s); no network icon in the top bar", e.message)
+                return
+            for prop in ("state", "primary-connection", "activating-connection"):
+                self.__nm.connect(f"notify::{prop}", lambda *_: self.__net_refresh())
+            self.__net_refresh()
+            # Signal strength changes without a state change.
+            GLib.timeout_add_seconds(5, self.__net_refresh)
+
+        NM.Client.new_async(None, ready, None)
+
+    def __net_refresh(self, *args):
+        from gi.repository import NM
+        from bootc_installer.defaults.network import signal_icon_name
+
+        client = self.__nm
+        if client is None:
+            return GLib.SOURCE_REMOVE
+        state = client.get_state()
+        primary = client.get_primary_connection()
+        has_wifi = any(d.get_device_type() == NM.DeviceType.WIFI for d in client.get_devices())
+        connected = (NM.State.CONNECTED_GLOBAL, NM.State.CONNECTED_SITE, NM.State.CONNECTED_LOCAL)
+
+        if state in connected and primary is not None:
+            limited = state != NM.State.CONNECTED_GLOBAL
+            if primary.get_connection_type() == NM.SETTING_WIRELESS_SETTING_NAME:
+                ap = None
+                for device in primary.get_devices() or []:
+                    if isinstance(device, NM.DeviceWifi):
+                        ap = device.get_active_access_point()
+                icon = "network-wireless-no-route-symbolic" if limited else signal_icon_name(
+                    ap.get_strength() if ap is not None else 0
+                )
+            else:
+                icon = "network-wired-no-route-symbolic" if limited else "network-wired-symbolic"
+            tip = _("Connected to {}").format(primary.get_id())
+            if limited:
+                tip += " " + _("(no internet)")
+        elif state == NM.State.CONNECTING:
+            icon = "network-wireless-acquiring-symbolic" if has_wifi else "network-wired-acquiring-symbolic"
+            tip = _("Connecting…")
+        else:
+            icon = "network-wireless-offline-symbolic" if has_wifi else "network-wired-disconnected-symbolic"
+            tip = _("Not connected")
+
+        self.net_status.set_from_icon_name(icon)
+        self.net_status.set_tooltip_text(tip)
+        self.net_status.set_visible(True)
+        return GLib.SOURCE_CONTINUE
 
     def __on_osk_appeared(self, connection, name, owner):
         self.__osk_bus = connection
@@ -345,6 +414,12 @@ class BootcWindow(Adw.ApplicationWindow):
                 visible = False
         self.__osk_set_visible(visible)
         return GLib.SOURCE_REMOVE
+
+    def request_keyboard(self):
+        """Turn the on-screen keyboard on, for a dialog that needs typing: a dialog blocks the top bar, so the
+        keyboard button cannot be pressed while it is open. The button stays on afterwards, like a press would."""
+        if self.btn_keyboard.get_visible() and not self.btn_keyboard.get_active():
+            self.btn_keyboard.set_active(True)
 
     def __on_keyboard_toggled(self, button):
         if self.__osk_bus is None:

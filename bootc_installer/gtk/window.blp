@@ -74,6 +74,14 @@ template $BootcWindow: Adw.ApplicationWindow {
         }
 
         [end]
+        Image net_status {
+          icon-name: "network-offline-symbolic";
+          visible: false;
+          margin-start: 6;
+          margin-end: 6;
+        }
+
+        [end]
         Button btn_credits {
           icon-name: "system-users-symbolic";
           tooltip-text: _("Credits");

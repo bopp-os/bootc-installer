@@ -21,7 +21,6 @@ from __future__ import annotations
 import logging
 import socket
 import time
-import subprocess
 from gettext import gettext as _
 from operator import attrgetter
 from threading import Lock, Timer
@@ -58,6 +57,19 @@ NM_802_11_AP_SEC_KEY_MGMT_PSK = 0x00000100
 NM_802_11_AP_SEC_KEY_MGMT_SAE = 0x00000400
 
 
+def signal_icon_name(strength: int) -> str:
+    """The Wi-Fi signal icon for a strength of 0 to 100 (the same steps as gnome-control-center)."""
+    if strength < 20:
+        return "network-wireless-signal-none-symbolic"
+    if strength < 40:
+        return "network-wireless-signal-weak-symbolic"
+    if strength < 50:
+        return "network-wireless-signal-ok-symbolic"
+    if strength < 80:
+        return "network-wireless-signal-good-symbolic"
+    return "network-wireless-signal-excellent-symbolic"
+
+
 @Gtk.Template(resource_path="/org/bootcinstaller/Installer/gtk/wireless-row.ui")
 class WirelessRow(Adw.ActionRow):
     __gtype_name__ = "WirelessRow"
@@ -65,6 +77,9 @@ class WirelessRow(Adw.ActionRow):
     signal_icon = Gtk.Template.Child()
     secure_icon = Gtk.Template.Child()
     connected_label = Gtk.Template.Child()
+
+    # True from pressing the row until NetworkManager says the connection is up or has failed.
+    _connecting = False
 
     def __init__(self, window, client, device: NM.DeviceWifi, ap, **kwargs):
         super().__init__(**kwargs)
@@ -99,18 +114,7 @@ class WirelessRow(Adw.ActionRow):
         return False
 
     def refresh_ui(self):
-        # We use the same strength logic as gnome-control-center
-        strength = self.signal_strength
-        if strength < 20:
-            icon_name = "network-wireless-signal-none-symbolic"
-        elif strength < 40:
-            icon_name = "network-wireless-signal-weak-symbolic"
-        elif strength < 50:
-            icon_name = "network-wireless-signal-ok-symbolic"
-        elif strength < 80:
-            icon_name = "network-wireless-signal-good-symbolic"
-        else:
-            icon_name = "network-wireless-signal-excellent-symbolic"
+        icon_name = signal_icon_name(self.signal_strength)
 
         self.set_title(self.ssid)
         self.signal_icon.set_from_icon_name(icon_name)
@@ -127,7 +131,12 @@ class WirelessRow(Adw.ActionRow):
         if tooltip is not None:
             self.secure_icon.set_tooltip_text(tooltip)
 
-        self.connected_label.set_visible(self.connected)
+        if self._connecting:
+            self.connected_label.set_label(_("Connecting…"))
+            self.connected_label.set_visible(True)
+        else:
+            self.connected_label.set_label(_("Connected"))
+            self.connected_label.set_visible(self.connected)
 
     def __get_security(self) -> tuple[bool | None, str | None]:
         flags = self.ap.get_flags()
@@ -162,90 +171,202 @@ class WirelessRow(Adw.ActionRow):
         else:
             return AP_SECURITY_TYPES["wpa2"]
 
-    # disabled due to a crashing issue
-    # @property
-    # def __key_mgmt(self):
-    #     # Key management used for the connection. One of "none" (WEP or no
-    #     # password protection), "ieee8021x" (Dynamic WEP), "owe" (Opportunistic
-    #     # Wireless Encryption), "wpa-psk" (WPA2 + WPA3 personal), "sae" (WPA3
-    #     # personal only), "wpa-eap" (WPA2 + WPA3 enterprise) or
-    #     # "wpa-eap-suite-b-192" (WPA3 enterprise only).
-    #     rsn_flags = self.ap.get_rsn_flags()
-    #     wpa_flags = self.ap.get_wpa_flags()
+    def __key_mgmt(self) -> str | None:
+        """The key-mgmt value a new connection to this network needs: None for an open network, "none" for WEP,
+        otherwise NetworkManager's name for the scheme ("wpa-psk", "sae", "owe", "wpa-eap")."""
+        flags = self.ap.get_flags()
+        both = self.ap.get_wpa_flags() | self.ap.get_rsn_flags()
+        if both & (NM_802_11_AP_SEC_KEY_MGMT_802_1X | NM_802_11_AP_SEC_KEY_MGMT_EAP_SUITE_B_192):
+            return "wpa-eap"
+        if both & (NM_802_11_AP_SEC_KEY_MGMT_OWE | NM_802_11_AP_SEC_KEY_MGMT_OWE_TM):
+            return "owe"
+        if both & NM_802_11_AP_SEC_KEY_MGMT_PSK:
+            # Also covers WPA2/WPA3 transition networks, which offer both.
+            return "wpa-psk"
+        if both & NM_802_11_AP_SEC_KEY_MGMT_SAE:
+            return "sae"
+        if both != NM_802_11_AP_SEC_NONE:
+            return "wpa-psk"
+        if flags & NM_802_11_AP_FLAGS_PRIVACY:
+            return "none"
+        return None
 
-    #     if wpa_flags == NM_802_11_AP_SEC_NONE and rsn_flags == NM_802_11_AP_SEC_NONE:
-    #         return "none"
-    #     elif rsn_flags & NM_802_11_AP_SEC_KEY_MGMT_802_1X:
-    #         return "ieee8021x"
-    #     elif rsn_flags & NM_802_11_AP_SEC_KEY_MGMT_EAP_SUITE_B_192:
-    #         return "wpa-eap-suite-b-192"
-    #     elif (
-    #         rsn_flags & NM_802_11_AP_SEC_KEY_MGMT_OWE
-    #         or rsn_flags & NM_802_11_AP_SEC_KEY_MGMT_OWE_TM
-    #     ):
-    #         return "owe"
-    #     elif rsn_flags & NM_802_11_AP_SEC_KEY_MGMT_PSK:
-    #         return "wpa-psk"
-    #     elif rsn_flags & NM_802_11_AP_SEC_KEY_MGMT_SAE:
-    #         return "sae"
+    @staticmethod
+    def password_ok(key_mgmt: str | None, password: str) -> bool:
+        """WPA personal keys are 8 to 63 characters, or 64 hex digits; WPA3 (SAE) and WEP only need something."""
+        if key_mgmt == "wpa-psk":
+            return 8 <= len(password) <= 64
+        return len(password) > 0
 
-    def __show_connect_dialog(self, data):
-        subprocess.Popen(["/usr/bin/gnome-control-center", "wifi"])
+    def __saved_connection(self):
+        """A connection NetworkManager already has for this network's name, or None."""
+        ssid = self.ap.get_ssid()
+        if ssid is None:
+            return None
+        want = ssid.get_data()
+        for conn in self.client.get_connections():
+            setting = conn.get_setting_wireless()
+            if setting is not None and setting.get_ssid() is not None and setting.get_ssid().get_data() == want:
+                return conn
+        return None
 
-        # The following is disabled temporarily to prevent crashes until a fix is found:
-        # dialog = NMA4.WifiDialog.new(
-        #     self.client, self.__construct_connection(), self.device, self.ap, False
-        # )
-        # dialog.set_modal(True)
-        # dialog.set_transient_for(self.__window)
+    def __build_connection(self, key_mgmt: str | None, password: str | None):
+        connection = NM.SimpleConnection.new()
+        s_con = NM.SettingConnection.new()
+        s_con.set_property(NM.SETTING_CONNECTION_ID, self.ssid)
+        s_con.set_property(NM.SETTING_CONNECTION_UUID, NM.utils_uuid_generate())
+        s_con.set_property(NM.SETTING_CONNECTION_TYPE, NM.SETTING_WIRELESS_SETTING_NAME)
+        connection.add_setting(s_con)
 
-        # dialog.connect("response", self.__on_dialog_response)
+        s_wifi = NM.SettingWireless.new()
+        s_wifi.set_property(NM.SETTING_WIRELESS_SSID, self.ap.get_ssid())
+        s_wifi.set_property(NM.SETTING_WIRELESS_MODE, NM.SETTING_WIRELESS_MODE_INFRA)
+        connection.add_setting(s_wifi)
 
-        # dialog.show()
+        if key_mgmt is not None:
+            s_sec = NM.SettingWirelessSecurity.new()
+            s_sec.set_property(NM.SETTING_WIRELESS_SECURITY_KEY_MGMT, key_mgmt)
+            if key_mgmt in ("wpa-psk", "sae"):
+                s_sec.set_property(NM.SETTING_WIRELESS_SECURITY_PSK, password)
+            elif key_mgmt == "none":
+                s_sec.set_property(NM.SETTING_WIRELESS_SECURITY_WEP_KEY0, password)
+                # 5 or 13 characters, or 10 or 26 hex digits, is the key itself; anything else is a passphrase.
+                key_type = NM.WepKeyType.KEY if len(password) in (5, 10, 13, 26) else NM.WepKeyType.PASSPHRASE
+                s_sec.set_property(NM.SETTING_WIRELESS_SECURITY_WEP_KEY_TYPE, key_type)
+            connection.add_setting(s_sec)
+        # IPv4 and IPv6 are left out: NetworkManager fills them in (automatic) when it adds the connection.
+        return connection
 
+    def __set_connecting(self, connecting: bool):
+        self._connecting = connecting
+        self.refresh_ui()
 
-    # disabled due to a crashing issue
-    # def __on_dialog_response(self, dialog, response_id):
-    #     def connect_cb(client, result, data):
-    #         try:
-    #             ac = client.add_and_activate_connection_finish(result)
-    #             logger.debug("ActiveConnection {}".format(ac.get_path()))
-    #         except Exception as e:
-    #             logger.error("Error:", e)
+    def __show_connect_dialog(self, *args):
+        if self.connected or self._connecting:
+            return
+        key_mgmt = self.__key_mgmt()
+        if key_mgmt == "wpa-eap":
+            self.__window.toast(
+                _("Enterprise (802.1X) networks can't be set up in the installer. Use another network or a cable."),
+                timeout=6,
+            )
+            return
+        saved = self.__saved_connection()
+        if saved is not None:
+            self.__set_connecting(True)
+            self.client.activate_connection_async(
+                saved, self.device, self.ap.get_path(), None, self.__on_activated_saved, key_mgmt
+            )
+        elif key_mgmt in (None, "owe"):
+            self.__add_and_activate(key_mgmt, None)
+        else:
+            self.__ask_password(key_mgmt)
 
-    #     if response_id == -6:
-    #         dialog.close()
-    #     elif response_id == -5:
-    #         conn, _, _ = dialog.get_connection()
-    #         self.client.add_and_activate_connection_async(
-    #             conn, self.device, self.ap.get_path(), None, connect_cb, None
-    #         )
-    #         dialog.close()
+    def __ask_password(self, key_mgmt: str, retry: bool = False):
+        body = (
+            _("That password did not work. Check it and try again.")
+            if retry
+            else _("Enter the password for this Wi-Fi network.")
+        )
+        dialog = Adw.AlertDialog.new(_("Connect to “{}”").format(self.ssid), body)
+        entry = Gtk.PasswordEntry(show_peek_icon=True, hexpand=True)
+        entry.set_property("placeholder-text", _("Password"))
+        dialog.set_extra_child(entry)
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("connect", _("Connect"))
+        dialog.set_response_appearance("connect", Adw.ResponseAppearance.SUGGESTED)
+        dialog.set_default_response("connect")
+        dialog.set_close_response("cancel")
+        dialog.set_response_enabled("connect", False)
 
-    # disabled due to a crashing issue
-    # def __construct_connection(self):
-    #     connection = NM.SimpleConnection.new()
-    #     s_con = NM.SettingConnection.new()
-    #     s_con.set_property(NM.SETTING_CONNECTION_ID, self.ssid)
-    #     s_con.set_property(NM.SETTING_CONNECTION_UUID, NM.utils_uuid_generate())
-    #     s_con.set_property(NM.SETTING_CONNECTION_TYPE, "802-11-wireless")
-    #     s_wifi = NM.SettingWireless.new()
-    #     s_wifi.set_property(NM.SETTING_WIRELESS_SSID, self.ap.get_ssid())
-    #     s_wifi.set_property(NM.SETTING_WIRELESS_MODE, "infrastructure")
-    #     s_wsec = NM.SettingWirelessSecurity.new()
-    #     s_wsec.set_property(NM.SETTING_WIRELESS_SECURITY_KEY_MGMT, self.__key_mgmt)
-    #     s_ip4 = NM.SettingIP4Config.new()
-    #     s_ip4.set_property(NM.SETTING_IP_CONFIG_METHOD, "auto")
-    #     s_ip6 = NM.SettingIP6Config.new()
-    #     s_ip6.set_property(NM.SETTING_IP_CONFIG_METHOD, "auto")
+        sent = [False]
 
-    #     connection.add_setting(s_con)
-    #     connection.add_setting(s_wifi)
-    #     connection.add_setting(s_wsec)
-    #     connection.add_setting(s_ip4)
-    #     connection.add_setting(s_ip6)
+        def connect_once():
+            if sent[0] or not self.password_ok(key_mgmt, entry.get_text()):
+                return False
+            sent[0] = True
+            self.__add_and_activate(key_mgmt, entry.get_text())
+            return True
 
-    #     return connection
+        entry.connect(
+            "changed", lambda e: dialog.set_response_enabled("connect", self.password_ok(key_mgmt, e.get_text()))
+        )
+        # Enter (on a hardware keyboard or the on-screen one) connects, as the button does.
+        entry.connect("activate", lambda e: connect_once() and dialog.force_close())
+        dialog.connect("response", lambda d, response: response == "connect" and connect_once())
+
+        # The dialog sits inside the installer window, so the on-screen keyboard stays up and the window shrinks
+        # to keep the dialog above it. The password field takes focus so the keys go there.
+        dialog.present(self.__window)
+        GLib.idle_add(lambda: entry.grab_focus() and False)
+        if hasattr(self.__window, "request_keyboard"):
+            self.__window.request_keyboard()
+
+    def __add_and_activate(self, key_mgmt: str | None, password: str | None):
+        self.__set_connecting(True)
+        self.client.add_and_activate_connection_async(
+            self.__build_connection(key_mgmt, password),
+            self.device,
+            self.ap.get_path(),
+            None,
+            self.__on_added,
+            key_mgmt,
+        )
+
+    def __on_added(self, client, result, key_mgmt):
+        try:
+            active = client.add_and_activate_connection_finish(result)
+        except GLib.Error as e:
+            self.__on_start_failed(e)
+            return
+        self.__watch(active, key_mgmt)
+
+    def __on_activated_saved(self, client, result, key_mgmt):
+        try:
+            active = client.activate_connection_finish(result)
+        except GLib.Error as e:
+            self.__on_start_failed(e)
+            return
+        self.__watch(active, key_mgmt)
+
+    def __on_start_failed(self, error):
+        logger.error("Could not connect to %s: %s", self.ssid, error.message)
+        self.__set_connecting(False)
+        self.__window.toast(_("Could not connect to {}: {}").format(self.ssid, error.message), timeout=6)
+
+    def __watch(self, active, key_mgmt):
+        """Follow the connection until it is up or has failed. A wrong password fails with "no secrets" (the live
+        system has no password agent to ask again): forget that connection and ask for the password again."""
+        handler = [None]
+
+        def finish(state, reason):
+            if state not in (NM.ActiveConnectionState.ACTIVATED, NM.ActiveConnectionState.DEACTIVATED):
+                return
+            if handler[0] is not None:
+                active.disconnect(handler[0])
+                handler[0] = None
+            self.__set_connecting(False)
+            if state == NM.ActiveConnectionState.ACTIVATED:
+                logger.info("Connected to %s", self.ssid)
+                self.__window.toast(_("Connected to {}").format(self.ssid))
+                return
+            logger.warning("Connection to %s failed (reason %s)", self.ssid, int(reason))
+            bad_password = reason in (
+                NM.ActiveConnectionStateReason.NO_SECRETS,
+                NM.ActiveConnectionStateReason.LOGIN_FAILED,
+            )
+            if bad_password and key_mgmt not in (None, "owe"):
+                remote = active.get_connection()
+                if remote is not None:
+                    remote.delete_async(None, None, None)
+                self.__ask_password(key_mgmt, retry=True)
+            else:
+                self.__window.toast(_("Could not connect to {}").format(self.ssid), timeout=6)
+
+        handler[0] = active.connect("state-changed", lambda ac, state, reason: finish(state, reason))
+        # It may have come up before the handler was connected.
+        if active.get_state() == NM.ActiveConnectionState.ACTIVATED:
+            finish(NM.ActiveConnectionState.ACTIVATED, 0)
 
 
 @Gtk.Template(resource_path="/org/bootcinstaller/Installer/gtk/default-network.ui")
