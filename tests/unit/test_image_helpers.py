@@ -683,7 +683,7 @@ class TestBootcDefaultImagePureLogic(unittest.TestCase):
 
     def test_should_show_skip_screen_and_leaf_count_helpers(self):
         widget = self._make_widget()
-        self.assertFalse(self.cls.should_show(widget, {"leaf_count": 1}))
+        self.assertTrue(self.cls.should_show(widget, {"leaf_count": 1}))
         self.assertTrue(self.cls.should_show(widget, {"leaf_count": 2}))
         self.assertEqual(self.cls.leaf_count.fget(widget), 4)
         self.assertFalse(self.cls.skip_screen.fget(widget))

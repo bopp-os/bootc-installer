@@ -203,13 +203,13 @@ class TestBootcDefaultDiskShouldShow(unittest.TestCase):
     def setUp(self):
         self.mod = _import_disk_fresh()
 
-    def test_should_show_uses_disk_count_threshold(self):
+    def test_should_show_always(self):
         obj = self.mod.BootcDefaultDisk.__new__(self.mod.BootcDefaultDisk)
         cases = [
             # Zero disks must show the page so it can explain why Install is
             # unavailable; skipping it led to an empty disk recipe (#154).
             ({"disk_count": 0}, True),
-            ({"disk_count": 1}, False),
+            ({"disk_count": 1}, True),   # the user still confirms the only disk
             ({"disk_count": 2}, True),
             ({}, True),
         ]
