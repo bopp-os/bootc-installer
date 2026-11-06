@@ -255,6 +255,10 @@ class BootcWindow(Adw.ApplicationWindow):
 
         logger.info("(%s) Page is changing...", getattr(page, "__gtype_name__", type(page).__name__))
 
+        # A search box that takes focus by itself (language, keyboard, timezone) would raise an on-screen keyboard over the
+        # list the moment the page opens: leave focus unset until the user taps a field.
+        GLib.idle_add(self.set_focus, None)
+
         # Disconnect sensitivity tracking from previous page
         if self.__next_page_widget is not None:
             for h in self.__next_handlers:
