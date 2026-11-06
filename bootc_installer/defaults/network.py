@@ -264,7 +264,13 @@ class BootcDefaultNetwork(Adw.Bin):
         self.__distro_info = distro_info
         self.__key = key
         self.__step = step
-        self.__nm_client = NM.Client.new()
+        try:
+            self.__nm_client = NM.Client.new()
+        except GLib.Error as e:
+            # No NetworkManager (a dev container, a stripped image): skip the page instead of failing the installer.
+            logger.warning("NetworkManager is not available (%s); skipping the network page", e)
+            self.__nm_client = None
+            return
         self.__step_num = step["num"]
         self.delta = False
 
@@ -307,6 +313,9 @@ class BootcDefaultNetwork(Adw.Bin):
     @property
     def step_id(self):
         return self.__key
+
+    def should_show(self, context: dict) -> bool:
+        return self.__nm_client is not None
 
     def get_finals(self):
         return {}
