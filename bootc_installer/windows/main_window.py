@@ -21,7 +21,7 @@ import logging
 import os
 from gettext import gettext as _
 
-from gi.repository import Adw, GLib, Gtk
+from gi.repository import Adw, Gio, GLib, Gtk
 
 from bootc_installer.core.system import Systeminfo
 from bootc_installer.utils.builder import Builder
@@ -64,6 +64,7 @@ class BootcWindow(Adw.ApplicationWindow):
     btn_exit = Gtk.Template.Child()
     btn_about = Gtk.Template.Child()
     btn_theme = Gtk.Template.Child()
+    btn_keyboard = Gtk.Template.Child()
     btn_credits = Gtk.Template.Child()
     toasts = Gtk.Template.Child()
 
@@ -116,6 +117,13 @@ class BootcWindow(Adw.ApplicationWindow):
         self.btn_exit.connect("clicked", self.__on_exit_clicked)
         self.btn_about.connect("clicked", self.__on_about_clicked)
         self.btn_theme.connect("clicked", self.__on_theme_clicked)
+        # The keyboard button only exists where an on-screen keyboard (squeekboard) is on the session bus.
+        self.__osk_bus = None
+        self.btn_keyboard.connect("toggled", self.__on_keyboard_toggled)
+        Gio.bus_watch_name(
+            Gio.BusType.SESSION, "sm.puri.OSK0", Gio.BusNameWatcherFlags.NONE,
+            self.__on_osk_appeared, self.__on_osk_vanished,
+        )
         self.btn_credits.connect("clicked", self.__on_credits_clicked)
         self.connect("close-request", self.__on_close_request)
         self.carousel.connect("page-changed", self.__on_page_changed)
@@ -248,6 +256,23 @@ class BootcWindow(Adw.ApplicationWindow):
         self.carousel.append(self.__view_progress)
         self.carousel.append(self.__view_recovery_key)
         self.carousel.append(self.__view_done)
+
+    def __on_osk_appeared(self, connection, name, owner):
+        self.__osk_bus = connection
+        self.btn_keyboard.set_visible(True)
+
+    def __on_osk_vanished(self, connection, name):
+        self.__osk_bus = None
+        self.btn_keyboard.set_visible(False)
+
+    def __on_keyboard_toggled(self, button):
+        if self.__osk_bus is None:
+            return
+        self.__osk_bus.call(
+            "sm.puri.OSK0", "/sm/puri/OSK0", "sm.puri.OSK0", "SetVisible",
+            GLib.Variant("(b)", (button.get_active(),)),
+            None, Gio.DBusCallFlags.NONE, -1, None, None,
+        )
 
     def __on_page_changed(self, *args):
         cur_index = self.carousel.get_position()

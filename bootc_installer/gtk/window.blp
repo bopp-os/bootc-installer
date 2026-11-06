@@ -61,6 +61,17 @@ template $BootcWindow: Adw.ApplicationWindow {
         }
 
         [end]
+        ToggleButton btn_keyboard {
+          icon-name: "input-keyboard-symbolic";
+          tooltip-text: _("Show or hide the on-screen keyboard");
+          visible: false;
+
+          styles [
+            "flat",
+          ]
+        }
+
+        [end]
         Button btn_credits {
           icon-name: "system-users-symbolic";
           tooltip-text: _("Credits");
