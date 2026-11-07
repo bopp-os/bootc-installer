@@ -565,6 +565,20 @@ class TestComposefs:
         r = _load(Processor.gen_install_recipe("log", finals, sys_recipe))
         assert "preloadSteam" not in r
 
+    def test_preload_steam_for_a_tag_the_catalog_does_not_list(self):
+        # The Legion Go test install used ghcr.io/bopp-os/cachyos-deck:v3-test, typed in.
+        sys_recipe = {"images": [{"registry": "ghcr.io/bopp-os/cachyos-deck", "preload_steam": True,
+                                  "children": [{"tag": "znver4"}]},
+                                 {"registry": "ghcr.io/bopp-os/cachyos-plasma",
+                                  "children": [{"tag": "v3"}]}]}
+        for image, want in (("ghcr.io/bopp-os/cachyos-deck:v3-test", True),
+                            ("ghcr.io/bopp-os/cachyos-deck@sha256:" + "a" * 64, True),
+                            ("ghcr.io/bopp-os/cachyos-plasma:v3-test", None),
+                            ("ghcr.io/someone/else:latest", None)):
+            finals = _auto_finals(image=image, user={"username": "gamer", "password": "pw"})
+            r = _load(Processor.gen_install_recipe("log", finals, sys_recipe))
+            assert r.get("preloadSteam") is want, image
+
     def test_preload_steam_must_be_a_boolean(self):
         with pytest.raises(ValueError, match="preloadSteam"):
             Processor.gen_install_recipe("log", _auto_finals(), {"preloadSteam": "yes"})

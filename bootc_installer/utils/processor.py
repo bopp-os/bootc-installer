@@ -306,7 +306,29 @@ class Processor:
                         return found
             return {}
 
+        # A tag the catalog does not list (typed in, e.g. "cachyos-deck:v3-test")
+        # still belongs to that catalog image: take the settings of the entry
+        # with the same registry, without any one tag's own fields.
+        def repository_of(reference):
+            reference = reference.split("@", 1)[0]
+            head, sep, tail = reference.rpartition(":")
+            return head if sep and "/" not in tail else reference
+
+        def find_registry(nodes, inherited=None):
+            for node in nodes if isinstance(nodes, list) else []:
+                if not isinstance(node, dict):
+                    continue
+                context = {**(inherited or {}), **{k: v for k, v in node.items() if k != "children"}}
+                if context.get("registry") == repository_of(metadata_imgref) and "registry" in node:
+                    return context
+                found = find_registry(node.get("children"), context)
+                if found:
+                    return found
+            return {}
+
         metadata = find_metadata(candidates)
+        if not metadata and metadata_imgref:
+            metadata = find_registry(candidates)
         if (not metadata and len(candidates) == 1
                 and not any(key in candidates[0] for key in ("imgref", "tag", "registry", "children"))):
             metadata = candidates[0]
