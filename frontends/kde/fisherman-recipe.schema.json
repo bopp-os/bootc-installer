@@ -147,6 +147,11 @@
       "default": false,
       "description": "Turn the Flatpak step into a no-op: nothing is copied from the host and the fallback set is not downloaded. For images that ship their own apps."
     },
+    "preloadSteam": {
+      "type": "boolean",
+      "default": false,
+      "description": "Download the Steam client into the new user's ~/.local/share/Steam at install time (images that boot into Steam's Game Mode). Best effort: offline or on a failed download the install goes on and Steam downloads the client on its first start."
+    },
     "kernelArgs": {
       "type": "array",
       "items": {

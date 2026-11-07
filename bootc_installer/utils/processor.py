@@ -336,6 +336,11 @@ class Processor:
         skip_flatpaks = field("skip_flatpaks", "skipFlatpaks", "skip_flatpaks", False)
         if not isinstance(skip_flatpaks, bool):
             raise ValueError("skipFlatpaks must be a boolean")  # noqa: TRY004 - invalid serialized recipe, surfaced in UI
+        # Images that boot into Steam's Game Mode have fisherman download the Steam
+        # client into the new account while the live system is online.
+        preload_steam = field("preload_steam", "preloadSteam", "preload_steam", False)
+        if not isinstance(preload_steam, bool):
+            raise ValueError("preloadSteam must be a boolean")  # noqa: TRY004 - invalid serialized recipe, surfaced in UI
         kernel_args = field("kernel_args", "kernelArgs", "kernel_args", [])
         if not isinstance(kernel_args, list) or not all(isinstance(k, str) and k for k in kernel_args):
             raise ValueError("kernelArgs must be a list of non-empty strings")
@@ -412,6 +417,9 @@ class Processor:
             recipe["skipFlatpaks"] = True
         if kernel_args:
             recipe["kernelArgs"] = kernel_args
+        # Only with an account to preload for; OOBE images create theirs on first boot.
+        if preload_steam and user_username:
+            recipe["preloadSteam"] = True
 
         # --- First-run marker: tells the first boot whether an account exists (the distro opts in) ---
         if sys_recipe.get("firstRunMarker"):

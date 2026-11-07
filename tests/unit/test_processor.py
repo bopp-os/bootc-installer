@@ -540,6 +540,35 @@ class TestComposefs:
         assert r["skipFlatpaks"] is True
         assert r["kernelArgs"] == ["amd_pstate=active"]
 
+    def test_preload_steam_absent_by_default(self):
+        r = _load(Processor.gen_install_recipe("log", _auto_finals(), _SYS_RECIPE))
+        assert "preloadSteam" not in r
+
+    def test_preload_steam_from_image_metadata(self):
+        image = "ghcr.io/bopp-os/cachyos-deck:znver4"
+        sys_recipe = {"images": [{"registry": "ghcr.io/bopp-os/cachyos-deck", "preload_steam": True,
+                                  "children": [{"tag": "znver4"}]}]}
+        finals = _auto_finals(image=image, user={"username": "gamer", "password": "pw"})
+        r = _load(Processor.gen_install_recipe("log", finals, sys_recipe))
+        assert r["preloadSteam"] is True
+
+    def test_preload_steam_needs_an_account(self):
+        image = "ghcr.io/bopp-os/cachyos-deck:znver4"
+        sys_recipe = {"images": [{"imgref": image, "preload_steam": True}]}
+        r = _load(Processor.gen_install_recipe("log", _auto_finals(image=image), sys_recipe))
+        assert "preloadSteam" not in r
+
+    def test_preload_steam_only_for_the_image_that_asks(self):
+        sys_recipe = {"images": [{"imgref": "ghcr.io/bopp-os/cachyos-deck:znver4", "preload_steam": True}]}
+        finals = _auto_finals(image="ghcr.io/bopp-os/cachyos-plasma:znver4",
+                              user={"username": "gamer", "password": "pw"})
+        r = _load(Processor.gen_install_recipe("log", finals, sys_recipe))
+        assert "preloadSteam" not in r
+
+    def test_preload_steam_must_be_a_boolean(self):
+        with pytest.raises(ValueError, match="preloadSteam"):
+            Processor.gen_install_recipe("log", _auto_finals(), {"preloadSteam": "yes"})
+
     def test_kernel_args_must_be_a_list_of_strings(self):
         with pytest.raises(ValueError, match="kernelArgs"):
             Processor.gen_install_recipe("log", _auto_finals(), {"kernelArgs": "quiet"})
