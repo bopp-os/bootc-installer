@@ -306,7 +306,29 @@ class Processor:
                         return found
             return {}
 
+        # A tag the catalog does not list (typed in, e.g. "cachyos-deck:v3-test")
+        # still belongs to that catalog image: take the settings of the entry
+        # with the same registry, without any one tag's own fields.
+        def repository_of(reference):
+            reference = reference.split("@", 1)[0]
+            head, sep, tail = reference.rpartition(":")
+            return head if sep and "/" not in tail else reference
+
+        def find_registry(nodes, inherited=None):
+            for node in nodes if isinstance(nodes, list) else []:
+                if not isinstance(node, dict):
+                    continue
+                context = {**(inherited or {}), **{k: v for k, v in node.items() if k != "children"}}
+                if context.get("registry") == repository_of(metadata_imgref) and "registry" in node:
+                    return context
+                found = find_registry(node.get("children"), context)
+                if found:
+                    return found
+            return {}
+
         metadata = find_metadata(candidates)
+        if not metadata and metadata_imgref:
+            metadata = find_registry(candidates)
         if (not metadata and len(candidates) == 1
                 and not any(key in candidates[0] for key in ("imgref", "tag", "registry", "children"))):
             metadata = candidates[0]
@@ -329,13 +351,18 @@ class Processor:
                            ("bootloader", bootloader), ("flatpakVarPath", flatpak_var_path)):
             if not isinstance(value, str):
                 raise ValueError(f"{key} must be a string")  # noqa: TRY004 - invalid serialized recipe, surfaced in UI
-        if bootloader not in ("", "grub2", "systemd"):
+        if bootloader not in ("", "grub2", "systemd", "grub-external"):
             raise ValueError(f"Unsupported bootloader: {bootloader!r}")
         # Images that ship their own apps turn off fisherman's fallback Flatpak
         # set; kernelArgs become one `bootc install --karg` each.
         skip_flatpaks = field("skip_flatpaks", "skipFlatpaks", "skip_flatpaks", False)
         if not isinstance(skip_flatpaks, bool):
             raise ValueError("skipFlatpaks must be a boolean")  # noqa: TRY004 - invalid serialized recipe, surfaced in UI
+        # Images that boot into Steam's Game Mode have fisherman download the Steam
+        # client into the new account while the live system is online.
+        preload_steam = field("preload_steam", "preloadSteam", "preload_steam", False)
+        if not isinstance(preload_steam, bool):
+            raise ValueError("preloadSteam must be a boolean")  # noqa: TRY004 - invalid serialized recipe, surfaced in UI
         kernel_args = field("kernel_args", "kernelArgs", "kernel_args", [])
         if not isinstance(kernel_args, list) or not all(isinstance(k, str) and k for k in kernel_args):
             raise ValueError("kernelArgs must be a list of non-empty strings")
@@ -412,6 +439,26 @@ class Processor:
             recipe["skipFlatpaks"] = True
         if kernel_args:
             recipe["kernelArgs"] = kernel_args
+        # Only with an account to preload for; OOBE images create theirs on first boot.
+        if preload_steam and user_username:
+            recipe["preloadSteam"] = True
+
+        # --- First-run marker: tells the first boot whether an account exists (the distro opts in) ---
+        if sys_recipe.get("firstRunMarker"):
+            user_info = merged.get("user")
+            has_user = isinstance(user_info, dict) and bool(user_info.get("username"))
+            recipe["firstRun"] = "welcome" if has_user else "oobe"
+
+        # --- Locale, keymap, timezone (the language, keyboard and timezone pages) ---
+        language = merged.get("language")
+        if isinstance(language, str) and language:
+            recipe["locale"] = language if "." in language else f"{language}.UTF-8"
+        keyboard = merged.get("keyboard")
+        if isinstance(keyboard, list) and keyboard and isinstance(keyboard[0], dict) and keyboard[0].get("layout"):
+            recipe["keymap"] = keyboard[0]["layout"]
+        timezone = merged.get("timezone")
+        if isinstance(timezone, dict) and timezone.get("region") and timezone.get("zone"):
+            recipe["timezone"] = f"{timezone['region']}/{timezone['zone']}"
         # Offline image stores: only when the ISO's recipe names them. Left
         # out, fisherman exposes the stores it finds on the host itself
         # (tuna-os/fisherman#276); [] would turn that off.

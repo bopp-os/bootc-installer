@@ -154,8 +154,8 @@ class TestRecipeLoaderEnrich(unittest.TestCase):
         self.assertIn("image", self.loader._RecipeLoader__recipe["steps"])
 
     @patch.object(RecipeLoader, "_host_live", return_value=(True, "ghcr.io/x/live:1"))
-    def test_live_iso_removes_image_step(self, _live):
-        """On live media, the image selection step is removed."""
+    def test_live_iso_keeps_image_step(self, _live):
+        """On live media without a local image, the user still chooses the image."""
         self.set_recipe({
             "log_file": "/tmp/test.log",
             "distro_name": "Test OS",
@@ -164,7 +164,7 @@ class TestRecipeLoaderEnrich(unittest.TestCase):
             "imgref": "ghcr.io/test/image:latest"
         })
         self.loader._RecipeLoader__enrich()
-        self.assertNotIn("image", self.loader._RecipeLoader__recipe["steps"])
+        self.assertIn("image", self.loader._RecipeLoader__recipe["steps"])
         # The configured image wins over the booted one.
         self.assertEqual(self.loader._RecipeLoader__recipe["imgref"], "ghcr.io/test/image:latest")
 
@@ -182,7 +182,7 @@ class TestRecipeLoaderEnrich(unittest.TestCase):
     def test_live_without_an_image_name_installs_the_running_system(self, _live):
         self.loader._RecipeLoader__enrich()
         self.assertNotIn("imgref", self.loader._RecipeLoader__recipe)
-        self.assertNotIn("image", self.loader._RecipeLoader__recipe["steps"])
+        self.assertIn("image", self.loader._RecipeLoader__recipe["steps"])
 
     @patch.object(RecipeLoader, "_host_live", return_value=(True, "ghcr.io/x/live:1"))
     def test_local_imgref_preserves_imgref(self, _live):

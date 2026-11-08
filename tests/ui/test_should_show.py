@@ -6,8 +6,9 @@ from bootc_installer.defaults.user import BootcDefaultUsers
 
 
 class TestImageStepShouldShow:
-    def test_hidden_when_single_leaf(self):
-        assert not BootcDefaultImage.should_show(object(), {"leaf_count": 1})
+    def test_visible_when_single_leaf(self):
+        # The installer preselects, never decides: one image is still shown.
+        assert BootcDefaultImage.should_show(object(), {"leaf_count": 1})
 
     def test_visible_when_multiple_leaves(self):
         assert BootcDefaultImage.should_show(object(), {"leaf_count": 2})
@@ -18,8 +19,9 @@ class TestDiskStepShouldShow:
         # #154: the page must appear and explain, not be skipped.
         assert BootcDefaultDisk.should_show(object(), {"disk_count": 0})
 
-    def test_hidden_when_single_disk(self):
-        assert not BootcDefaultDisk.should_show(object(), {"disk_count": 1})
+    def test_visible_when_single_disk(self):
+        # Which disk is erased is the user's decision, even when there is only one.
+        assert BootcDefaultDisk.should_show(object(), {"disk_count": 1})
 
     def test_visible_when_multiple_disks(self):
         assert BootcDefaultDisk.should_show(object(), {"disk_count": 2})

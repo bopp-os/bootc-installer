@@ -148,6 +148,8 @@ if _aliases:
 _IMAGE_TREE = _MANIFEST["images"]
 _DEFAULT_IMAGE = _MANIFEST.get("default_image", "")
 _FALLBACK_FLATPAKS = _MANIFEST["fallback_flatpaks"]
+# Settings a typed-in (custom) image gets: the catalog file can say what its distro needs (user creation, bootloader, ...).
+_CUSTOM_DEFAULTS = _MANIFEST.get("custom_defaults", {})
 _APP_NAME = _MANIFEST.get("app_name", "bootc Installer")
 
 
@@ -200,7 +202,7 @@ def _count_leaves(nodes: list) -> int:
     """Recursively count selectable leaf image nodes in the tree."""
     count = 0
     for node in nodes:
-        if "imgref" in node:
+        if "imgref" in node or "tag" in node:   # "tag" is the registry:tag shorthand
             count += 1
         else:
             count += _count_leaves(node.get("children", []))
@@ -298,7 +300,7 @@ class BootcDefaultImage(Adw.Bin):
         self.__selected_needs_user_creation = False
         self.__selected_composefs_backend = False  # image requires composefs backend
         self.__selected_image_type = "bootc"        # "bootc" or "ostree"
-        self.__selected_bootloader = ""             # "grub2", "systemd", or "" (default)
+        self.__selected_bootloader = ""             # "grub2", "systemd", "grub-external", or "" (default)
         self.__selected_image_filesystem = ""       # filesystem required by image, or ""
         self.__selected_icon = None      # icon spec for selected image (str or None)
         self.__selected_pretty_name = _imgref_to_pretty_name(_DEFAULT_IMAGE)
@@ -486,14 +488,14 @@ class BootcDefaultImage(Adw.Bin):
             self.__selected_imgref = None
             self.__selected_icon = None
             self.__selected_carousel = None
-            self.__selected_needs_user_creation = False
-            self.__selected_composefs_backend = False
+            self.__selected_needs_user_creation = bool(_CUSTOM_DEFAULTS.get("needs_user_creation", False))
+            self.__selected_composefs_backend = bool(_CUSTOM_DEFAULTS.get("composefs", False))
             self.__selected_image_type = "bootc"
-            self.__selected_bootloader = ""
-            self.__selected_image_filesystem = ""
+            self.__selected_bootloader = _CUSTOM_DEFAULTS.get("bootloader", "")
+            self.__selected_image_filesystem = _CUSTOM_DEFAULTS.get("filesystem", "")
             self.__selected_pretty_name = None
-            self.__selected_default_hostname = ""
-            self.__selected_filesystems = []
+            self.__selected_default_hostname = _CUSTOM_DEFAULTS.get("default_hostname", "")
+            self.__selected_filesystems = list(_CUSTOM_DEFAULTS.get("filesystems", []))
         self.__update_btn_next()
 
     def __on_url_changed(self, entry):
@@ -557,7 +559,8 @@ class BootcDefaultImage(Adw.Bin):
     # ── Test / finals ─────────────────────────────────────────────────────────
 
     def should_show(self, context: dict) -> bool:
-        return context.get("leaf_count", 2) > 1
+        # Always shown, even with one image: the installer may preselect, never decide for the user.
+        return True
 
     @property
     def skip_screen(self) -> bool:
@@ -585,12 +588,14 @@ class BootcDefaultImage(Adw.Bin):
                 "pretty_name": _imgref_to_pretty_name(url),
                 "flatpaks": _FALLBACK_FLATPAKS,
                 "carousel": None,
-                "needs_user_creation": False,
-                "composefs_backend": False,
+                "needs_user_creation": self.__selected_needs_user_creation,
+                "composefs_backend": self.__selected_composefs_backend,
                 "image_type": "bootc",
-                "bootloader": "",
-                "image_filesystem": "",
+                "bootloader": self.__selected_bootloader,
+                "image_filesystem": self.__selected_image_filesystem,
                 "icon": None,
+                "default_hostname": self.__selected_default_hostname,
+                "supported_filesystems": self.__selected_filesystems,
             }
         return {
             "selected_image": self.__selected_imgref,

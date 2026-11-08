@@ -21,7 +21,7 @@ import logging
 import os
 from gettext import gettext as _
 
-from gi.repository import Adw, GLib, Gtk
+from gi.repository import Adw, Gio, GLib, Gtk
 
 from bootc_installer.core.system import Systeminfo
 from bootc_installer.utils.builder import Builder
@@ -63,7 +63,10 @@ class BootcWindow(Adw.ApplicationWindow):
     btn_next = Gtk.Template.Child()
     btn_exit = Gtk.Template.Child()
     btn_about = Gtk.Template.Child()
+    btn_theme = Gtk.Template.Child()
+    btn_keyboard = Gtk.Template.Child()
     btn_credits = Gtk.Template.Child()
+    net_status = Gtk.Template.Child()
     toasts = Gtk.Template.Child()
 
     def __init__(self, autoinstall_recipe: str | None = None, **kwargs):
@@ -114,7 +117,29 @@ class BootcWindow(Adw.ApplicationWindow):
         self.btn_next.connect("clicked", self.__on_header_next)
         self.btn_exit.connect("clicked", self.__on_exit_clicked)
         self.btn_about.connect("clicked", self.__on_about_clicked)
+        self.btn_theme.connect("clicked", self.__on_theme_clicked)
+        # The keyboard button only exists where an on-screen keyboard (squeekboard) is on the session bus.
+        self.__focus_cleared_for = None
+        self.__osk_bus = None
+        self.btn_keyboard.connect("toggled", self.__on_keyboard_toggled)
+        # A field that selects its text when it gains focus loses what was typed on the next key press whenever the
+        # on-screen keyboard makes the window re-take focus.
+        try:
+            Gtk.Settings.get_default().set_property("gtk-entry-select-on-focus", False)
+        except TypeError:
+            logger.debug("gtk-entry-select-on-focus is not available in this GTK")
+        # The text field last typed in, so that the keyboard button can hand focus back to it.
+        self.__last_text = None
+        self.connect("notify::focus-widget", self.__on_focus_widget)
+        self.connect("notify::is-active", lambda *_: logger.info("Window active: %s", self.is_active()))
+        # Dialogs open and close as windows of their own: recheck whether the keyboard may stay up.
+        Gtk.Window.get_toplevels().connect("items-changed", lambda *_: GLib.idle_add(self.__osk_refresh))
+        Gio.bus_watch_name(
+            Gio.BusType.SESSION, "sm.puri.OSK0", Gio.BusNameWatcherFlags.NONE,
+            self.__on_osk_appeared, self.__on_osk_vanished,
+        )
         self.btn_credits.connect("clicked", self.__on_credits_clicked)
+        self.__start_net_status()
         self.connect("close-request", self.__on_close_request)
         self.carousel.connect("page-changed", self.__on_page_changed)
         self.__reconnect_update_finals()
@@ -247,11 +272,174 @@ class BootcWindow(Adw.ApplicationWindow):
         self.carousel.append(self.__view_recovery_key)
         self.carousel.append(self.__view_done)
 
+    def __clear_text_focus(self):
+        if self.btn_keyboard.get_active():
+            self.__focus_text_for_keyboard()
+            self.__osk_refresh()
+        elif isinstance(self.get_focus(), Gtk.Editable):
+            self.set_focus(None)
+        return GLib.SOURCE_REMOVE
+
+    def __first_editable(self, widget):
+        """The first visible, enabled text field in widget's tree (search boxes and entry rows), or None."""
+        if not (widget.get_visible() and widget.get_sensitive()):
+            return None
+        if isinstance(widget, Gtk.Editable):
+            return widget
+        child = widget.get_first_child()
+        while child is not None:
+            found = self.__first_editable(child)
+            if found is not None:
+                return found
+            child = child.get_next_sibling()
+        return None
+
+    def __focus_text_for_keyboard(self):
+        """With the on-screen keyboard up, a text field must have focus, or the keys go nowhere: the field in use
+        if it is on screen, else the first one on the current page."""
+        focus = self.get_focus()
+        if isinstance(focus, Gtk.Editable) and focus.get_mapped():
+            # Already in a text field (such as a dialog's password field): leave it there.
+            return GLib.SOURCE_REMOVE
+        target = self.__last_text if self.__last_text is not None and self.__last_text.get_mapped() else None
+        if target is None:
+            page = self.carousel.get_nth_page(round(self.carousel.get_position()))
+            target = self.__first_editable(page) if page is not None else None
+        if target is not None:
+            target.grab_focus()
+        logger.info("Keyboard up: focus on %s", type(target).__name__ if target is not None else "no field")
+        return GLib.SOURCE_REMOVE
+
+    def __start_net_status(self):
+        """A network icon in the top bar, on every page: wired, Wi-Fi signal, connecting, or not connected. It only
+        shows where NetworkManager is running."""
+        self.__nm = None
+        try:
+            from gi.repository import NM
+        except ImportError:
+            logger.info("libnm is not available; no network icon in the top bar")
+            return
+
+        def ready(source, result, *args):
+            try:
+                self.__nm = NM.Client.new_finish(result)
+            except GLib.Error as e:
+                logger.info("NetworkManager is not available (%s); no network icon in the top bar", e.message)
+                return
+            for prop in ("state", "primary-connection", "activating-connection"):
+                self.__nm.connect(f"notify::{prop}", lambda *_: self.__net_refresh())
+            self.__net_refresh()
+            # Signal strength changes without a state change.
+            GLib.timeout_add_seconds(5, self.__net_refresh)
+
+        NM.Client.new_async(None, ready, None)
+
+    def __net_refresh(self, *args):
+        from gi.repository import NM
+        from bootc_installer.defaults.network import signal_icon_name
+
+        client = self.__nm
+        if client is None:
+            return GLib.SOURCE_REMOVE
+        state = client.get_state()
+        primary = client.get_primary_connection()
+        has_wifi = any(d.get_device_type() == NM.DeviceType.WIFI for d in client.get_devices())
+        connected = (NM.State.CONNECTED_GLOBAL, NM.State.CONNECTED_SITE, NM.State.CONNECTED_LOCAL)
+
+        if state in connected and primary is not None:
+            limited = state != NM.State.CONNECTED_GLOBAL
+            if primary.get_connection_type() == NM.SETTING_WIRELESS_SETTING_NAME:
+                ap = None
+                for device in primary.get_devices() or []:
+                    if isinstance(device, NM.DeviceWifi):
+                        ap = device.get_active_access_point()
+                icon = "network-wireless-no-route-symbolic" if limited else signal_icon_name(
+                    ap.get_strength() if ap is not None else 0
+                )
+            else:
+                icon = "network-wired-no-route-symbolic" if limited else "network-wired-symbolic"
+            tip = _("Connected to {}").format(primary.get_id())
+            if limited:
+                tip += " " + _("(no internet)")
+        elif state == NM.State.CONNECTING:
+            icon = "network-wireless-acquiring-symbolic" if has_wifi else "network-wired-acquiring-symbolic"
+            tip = _("Connecting…")
+        else:
+            icon = "network-wireless-offline-symbolic" if has_wifi else "network-wired-disconnected-symbolic"
+            tip = _("Not connected")
+
+        self.net_status.set_from_icon_name(icon)
+        self.net_status.set_tooltip_text(tip)
+        self.net_status.set_visible(True)
+        return GLib.SOURCE_CONTINUE
+
+    def __on_osk_appeared(self, connection, name, owner):
+        self.__osk_bus = connection
+        self.btn_keyboard.set_visible(True)
+
+    def __on_osk_vanished(self, connection, name):
+        self.__osk_bus = None
+        self.btn_keyboard.set_visible(False)
+
+    def __on_focus_widget(self, *args):
+        widget = self.get_focus()
+        logger.info("Focus: %s, window active: %s", type(widget).__name__, self.is_active())
+        if self.btn_keyboard.get_active():
+            # The button means "keyboard stays up until I press it again": squeekboard hides itself when the field
+            # that had focus goes away (Next, Back), so ask for it again.
+            GLib.idle_add(self.__osk_refresh)
+        if isinstance(widget, Gtk.Editable):
+            self.__last_text = widget
+
+    def __osk_set_visible(self, visible):
+        if self.__osk_bus is not None:
+            self.__osk_bus.call(
+                "sm.puri.OSK0", "/sm/puri/OSK0", "sm.puri.OSK0", "SetVisible",
+                GLib.Variant("(b)", (visible,)),
+                None, Gio.DBusCallFlags.NONE, -1, None, None,
+            )
+        return GLib.SOURCE_REMOVE
+
+    def __osk_refresh(self):
+        """Show the keyboard while the button is on, except over a dialog with no text field: a dialog is a window of
+        its own that does not move out of the keyboard's way, so the keyboard would cover its buttons."""
+        if self.__osk_bus is None:
+            return GLib.SOURCE_REMOVE
+        visible = self.btn_keyboard.get_active()
+        if visible:
+            toplevels = Gtk.Window.get_toplevels()
+            dialogs = [toplevels.get_item(i) for i in range(toplevels.get_n_items())]
+            dialogs = [w for w in dialogs if w is not self]
+            if dialogs and not any(self.__first_editable(w) is not None for w in dialogs):
+                visible = False
+        self.__osk_set_visible(visible)
+        return GLib.SOURCE_REMOVE
+
+    def request_keyboard(self):
+        """Turn the on-screen keyboard on, for a dialog that needs typing: a dialog blocks the top bar, so the
+        keyboard button cannot be pressed while it is open. The button stays on afterwards, like a press would."""
+        if self.btn_keyboard.get_visible() and not self.btn_keyboard.get_active():
+            self.btn_keyboard.set_active(True)
+
+    def __on_keyboard_toggled(self, button):
+        if self.__osk_bus is None:
+            return
+        if button.get_active():
+            GLib.idle_add(self.__focus_text_for_keyboard)
+        self.__osk_refresh()
+
     def __on_page_changed(self, *args):
         cur_index = self.carousel.get_position()
         page = self.carousel.get_nth_page(cur_index)
 
         logger.info("(%s) Page is changing...", getattr(page, "__gtype_name__", type(page).__name__))
+
+        # A search box that takes focus by itself (language, keyboard, timezone) would raise an on-screen keyboard over the
+        # list the moment the page opens: drop that focus once per page, shortly after it opens, so that a field the
+        # user taps afterwards keeps it (this handler also runs again while pages are rebuilt).
+        if cur_index != self.__focus_cleared_for:
+            self.__focus_cleared_for = cur_index
+            GLib.timeout_add(300, self.__clear_text_focus)
 
         # Disconnect sensitivity tracking from previous page
         if self.__next_page_widget is not None:
@@ -434,6 +622,12 @@ class BootcWindow(Adw.ApplicationWindow):
 
     def __on_recovery_key_acknowledged(self, *args):
         self.__go_to_page(self.__view_done)
+
+    def __on_theme_clicked(self, _widget):
+        manager = Adw.StyleManager.get_default()
+        manager.set_color_scheme(
+            Adw.ColorScheme.FORCE_LIGHT if manager.get_dark()
+            else Adw.ColorScheme.FORCE_DARK)
 
     def __on_about_clicked(self, *args):
         # Vendor and website come from the branding contract (branding.json,

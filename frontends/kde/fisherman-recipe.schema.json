@@ -65,7 +65,7 @@
     },
     "bootloader": {
       "type": "string",
-      "enum": ["", "grub2", "systemd"],
+      "enum": ["", "grub2", "systemd", "grub-external"],
       "description": "Explicit bootloader selection"
     },
     "composeFsBackend": {
@@ -86,6 +86,23 @@
       "default": "bootc",
       "pattern": "^([a-z][a-z0-9-]{0,62})?$",
       "description": "Short lowercase distribution id that names the OEM setup paths and services on the target (/etc/<distroID>/oem/). Frontends write the branding id; fisherman uses \"bootc\" when it is empty."
+    },
+    "firstRun": {
+      "type": "string",
+      "enum": ["", "welcome", "oobe"],
+      "description": "Writes /var/lib/<distroID>/first-run (mode=welcome when an account was created, mode=oobe when not) so the first boot knows how to start."
+    },
+    "locale": {
+      "type": "string",
+      "description": "LANG for the installed system, e.g. en_US.UTF-8. Written to /etc/locale.conf; empty leaves the image's setting."
+    },
+    "keymap": {
+      "type": "string",
+      "description": "Console keymap, e.g. us. Written to /etc/vconsole.conf; empty leaves the image's setting."
+    },
+    "timezone": {
+      "type": "string",
+      "description": "Zoneinfo name, e.g. Europe/Berlin. Linked as /etc/localtime; empty leaves the image's setting."
     },
     "selinuxDisabled": {
       "type": "boolean",
@@ -129,6 +146,11 @@
       "type": "boolean",
       "default": false,
       "description": "Turn the Flatpak step into a no-op: nothing is copied from the host and the fallback set is not downloaded. For images that ship their own apps."
+    },
+    "preloadSteam": {
+      "type": "boolean",
+      "default": false,
+      "description": "Download the Steam client into the new user's ~/.local/share/Steam at install time (images that boot into Steam's Game Mode). Best effort: offline or on a failed download the install goes on and Steam downloads the client on its first start."
     },
     "kernelArgs": {
       "type": "array",

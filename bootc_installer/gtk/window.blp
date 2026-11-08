@@ -41,6 +41,16 @@ template $BootcWindow: Adw.ApplicationWindow {
         }
 
         [end]
+        Button btn_theme {
+          icon-name: "weather-clear-night-symbolic";
+          tooltip-text: _("Switch between dark and light");
+
+          styles [
+            "flat",
+          ]
+        }
+
+        [end]
         Button btn_about {
           icon-name: "help-about-symbolic";
           tooltip-text: _("About");
@@ -48,6 +58,27 @@ template $BootcWindow: Adw.ApplicationWindow {
           styles [
             "flat",
           ]
+        }
+
+        [end]
+        ToggleButton btn_keyboard {
+          icon-name: "input-keyboard-symbolic";
+          tooltip-text: _("Show or hide the on-screen keyboard");
+          visible: false;
+          focus-on-click: false;
+          focusable: false;
+
+          styles [
+            "flat",
+          ]
+        }
+
+        [end]
+        Image net_status {
+          icon-name: "network-offline-symbolic";
+          visible: false;
+          margin-start: 6;
+          margin-end: 6;
         }
 
         [end]

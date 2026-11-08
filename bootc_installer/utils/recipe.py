@@ -188,9 +188,14 @@ class RecipeLoader:
                 f"({self.__recipe['local_imgref']}), imgref stays as remote tracking ref"
             )
 
-        # Remove the image selection step — use the configured image silently
-        self.__recipe["steps"].pop("image", None)
-        logger.info("Live media: image selection step removed")
+        # The image is already on the media only for an offline install
+        # (local_imgref): then use it silently. A network installer has no image
+        # on board, so the user still chooses one (recipe imgref is the fallback).
+        if self.__recipe.get("local_imgref"):
+            self.__recipe["steps"].pop("image", None)
+            logger.info("Live media: image selection step removed")
+        else:
+            logger.info("Live media: no local image, image selection kept")
 
     def __validate(self):
         # distro_name/distro_logo are no longer essential: __apply_branding fills

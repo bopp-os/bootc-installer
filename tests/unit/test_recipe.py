@@ -191,8 +191,13 @@ class TestLiveISOEnrich(unittest.TestCase):
              patch("bootc_installer.utils.recipe.RecipeLoader._in_flatpak", False):
             return RecipeLoader()
 
-    def test_live_iso_removes_image_step(self):
+    def test_live_iso_keeps_image_step_without_a_local_image(self):
+        # A network installer has no image on board: the user still chooses one.
         loader = self._load_live(_VALID_RECIPE)
+        self.assertIn("image", loader.raw.get("steps", {}))
+
+    def test_live_iso_removes_image_step_with_a_local_image(self):
+        loader = self._load_live({**_VALID_RECIPE, "local_imgref": "oci:/run/media/image"})
         self.assertNotIn("image", loader.raw.get("steps", {}))
 
     def test_live_iso_mode_uses_imgref_from_recipe(self):

@@ -262,6 +262,11 @@ class TestCountLeaves(unittest.TestCase):
         ]
         self.assertEqual(_count_leaves(nodes), 3)
 
+    def test_tag_shorthand_leaves_are_counted(self):
+        nodes = [{"name": "Plasma", "registry": "ghcr.io/example/plasma",
+                  "children": [{"name": "v3", "tag": "v3"}, {"name": "v4", "tag": "v4"}]}]
+        self.assertEqual(_count_leaves(nodes), 2)
+
     def test_nested_groups_count_recursively(self):
         nodes = [
             {
@@ -678,7 +683,7 @@ class TestBootcDefaultImagePureLogic(unittest.TestCase):
 
     def test_should_show_skip_screen_and_leaf_count_helpers(self):
         widget = self._make_widget()
-        self.assertFalse(self.cls.should_show(widget, {"leaf_count": 1}))
+        self.assertTrue(self.cls.should_show(widget, {"leaf_count": 1}))
         self.assertTrue(self.cls.should_show(widget, {"leaf_count": 2}))
         self.assertEqual(self.cls.leaf_count.fget(widget), 4)
         self.assertFalse(self.cls.skip_screen.fget(widget))
@@ -707,6 +712,11 @@ class TestBootcDefaultImagePureLogic(unittest.TestCase):
         widget = self._make_widget()
         widget.row_custom.get_expanded.return_value = True
         widget.image_url_entry.get_text.return_value = "ghcr.io/example/custom-dx:stable"
+        # What opening the custom row sets with no custom_defaults in the catalog.
+        widget._BootcDefaultImage__selected_needs_user_creation = False
+        widget._BootcDefaultImage__selected_composefs_backend = False
+        widget._BootcDefaultImage__selected_bootloader = ""
+        widget._BootcDefaultImage__selected_image_filesystem = ""
 
         finals = self.cls.get_finals(widget)
 

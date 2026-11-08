@@ -48,11 +48,15 @@ if __name__ == '__main__':
     we achieve this by hacking the mutter gschemas at
     org.gnome.mutter center-new-windows.
     Ref: https://discourse.gnome.org/t/how-to-center-gtkwindows-in-gtk4/3112/4
+    Only where mutter's schema exists: Gio.Settings.new aborts the process on
+    a missing schema, and a kiosk session (cage on live media) has no mutter.
     '''
 
-    settings = Gio.Settings.new('org.gnome.mutter')
+    source = Gio.SettingsSchemaSource.get_default()
+    has_mutter = source is not None and source.lookup('org.gnome.mutter', True) is not None
+    settings = Gio.Settings.new('org.gnome.mutter') if has_mutter else None
 
-    if settings.get_boolean('center-new-windows') == False:
+    if settings is not None and settings.get_boolean('center-new-windows') == False:
 
         settings.set_boolean('center-new-windows', True)
 

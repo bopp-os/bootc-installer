@@ -91,8 +91,19 @@ class BootcDefaultLanguage(Adw.Bin):
         else:
             self.btn_next.set_sensitive(False)
 
+    # Offered first, in this order; the rest keep their alphabetical order.
+    _COMMON_LANGUAGES = [
+        "en_US.UTF-8", "en_GB.UTF-8", "es_ES.UTF-8", "de_DE.UTF-8", "fr_FR.UTF-8",
+        "pt_BR.UTF-8", "ru_RU.UTF-8", "zh_CN.UTF-8", "ja_JP.UTF-8", "it_IT.UTF-8",
+    ]
+
     def __generate_language_list_widgets(self):
-        for language_code, language_title in all_languages.items():
+        common = self._COMMON_LANGUAGES
+        ordered = sorted(
+            all_languages.items(),
+            key=lambda item: common.index(item[0]) if item[0] in common else len(common),
+        )
+        for language_code, language_title in ordered:
             language_row = LanguageRow(
                 language_title, language_code, self.selected_language
             )

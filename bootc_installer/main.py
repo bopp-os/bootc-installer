@@ -118,6 +118,8 @@ class BootcInstaller(Adw.Application):
 
     def do_activate(self):
         logger.info("do_activate called")
+        # Dark unless the system says otherwise (the live ISO has no desktop settings); the header button switches.
+        Adw.StyleManager.get_default().set_color_scheme(Adw.ColorScheme.PREFER_DARK)
         win = self.props.active_window
         if not win:
             try:
