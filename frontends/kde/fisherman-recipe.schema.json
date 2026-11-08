@@ -152,6 +152,11 @@
       "default": false,
       "description": "Download the Steam client into the new user's ~/.local/share/Steam at install time (images that boot into Steam's Game Mode). Best effort: offline or on a failed download the install goes on and Steam downloads the client on its first start."
     },
+    "keepFiles": {
+      "type": "boolean",
+      "default": false,
+      "description": "Reinstall over the existing install on disk instead of erasing it: no partitioning, the root filesystem and its LUKS container (unlocked with encryption.passphrase) are kept, the old homes and Wi-Fi profiles move into the new install, everything else of the old system is deleted, and the ESP is reformatted. encryption.type is \"none\" for a plain root, \"luks-passphrase\" to keep the container's keyslots and TPM2 token, or \"tpm2-luks-passphrase\" to re-enroll the TPM2 on the first boot."
+    },
     "kernelArgs": {
       "type": "array",
       "items": {

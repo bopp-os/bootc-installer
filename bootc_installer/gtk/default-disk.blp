@@ -69,6 +69,29 @@ template $BootcDefaultDisk: Adw.Bin {
 
         Adw.PreferencesGroup group_disks {}
 
+        // Shown by disk.py when the selected disk holds an install (probe's existing_install).
+        Adw.PreferencesGroup group_keep_files {
+          visible: false;
+          title: _("Existing install found");
+
+          Adw.ActionRow keep_files_row {
+            title: _("Keep my files");
+            subtitle: _("Reinstall and keep the files in /home, saved Wi-Fi networks and the disk encryption. The rest of the old system is replaced.");
+            activatable-widget: keep_files_switch;
+
+            [suffix]
+            Switch keep_files_switch {
+              valign: center;
+              active: false;
+            }
+          }
+
+          Adw.PasswordEntryRow keep_files_pass_entry {
+            title: _("Current disk encryption password");
+            visible: false;
+          }
+        }
+
         Adw.PreferencesGroup {
           Box {
             halign: center;

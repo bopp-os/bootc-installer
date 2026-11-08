@@ -121,6 +121,7 @@ COPY_DEFAULTS_JSON = r'''{
   "validate_encryption_passphrase_required": "Enter a passphrase.",
   "validate_encryption_unsupported_on_zfs": "ZFS cannot be encrypted. Choose a different filesystem or no encryption.",
   "validate_encryption_unsupported_on_manual_layout": "Encryption is not available with manual partitioning.",
+  "validate_keep_files_unsupported": "Keeping your files is not possible with this setting. Erase the disk instead.",
   "validate_encryption_tpm_unavailable": "This computer has no usable TPM. Choose a different encryption type.",
   "validate_filesystem_unsupported": "This filesystem is not supported.",
   "validate_btrfs_subvolumes_require_btrfs": "Subvolumes need the Btrfs filesystem.",
