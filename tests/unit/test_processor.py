@@ -1146,3 +1146,39 @@ class TestDistroID:
                             lambda *a, **k: branding.Branding(id="somedistro"))
         r = _load(Processor.gen_install_recipe("log", _auto_finals(), _SYS_RECIPE))
         assert r["distroID"] == "somedistro"
+
+
+class TestKeepFiles:
+    """Keep my files: reinstall over an existing install (fisherman keepFiles)."""
+
+    def _finals(self, encrypted=True, passphrase="old pw", encryption=None, fs="btrfs"):
+        finals = _auto_finals(disk="/dev/nvme0n1", fs=fs, encryption=encryption)
+        auto = finals[0]["disk"]["auto"]
+        auto["keep_files"] = True
+        auto["keep_files_encrypted"] = encrypted
+        auto["keep_files_passphrase"] = passphrase
+        return finals
+
+    def test_encrypted_disk_is_unlocked_with_its_current_password(self):
+        # The encryption step asked for a new password and TPM2; keep mode ignores it.
+        enc = {"use_encryption": True, "type": "tpm2-luks-passphrase", "encryption_key": "new pw"}
+        r = _load(Processor.gen_install_recipe("log", self._finals(encryption=enc), _SYS_RECIPE))
+        assert r["keepFiles"] is True
+        assert r["disk"] == "/dev/nvme0n1"
+        assert r["encryption"] == {"type": "luks-passphrase", "passphrase": "old pw"}
+        assert r["btrfsSubvolumes"] is False
+
+    def test_plain_disk_stays_plain(self):
+        enc = {"use_encryption": True, "type": "luks-passphrase", "encryption_key": "new pw"}
+        r = _load(Processor.gen_install_recipe(
+            "log", self._finals(encrypted=False, passphrase="", encryption=enc), _SYS_RECIPE))
+        assert r["keepFiles"] is True
+        assert r["encryption"] == {"type": "none", "passphrase": ""}
+
+    def test_encrypted_disk_without_a_password_is_refused(self):
+        with pytest.raises(ValueError):
+            Processor.gen_install_recipe("log", self._finals(passphrase=""), _SYS_RECIPE)
+
+    def test_absent_when_erasing(self):
+        r = _load(Processor.gen_install_recipe("log", _auto_finals(), _SYS_RECIPE))
+        assert "keepFiles" not in r

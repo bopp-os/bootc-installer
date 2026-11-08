@@ -126,6 +126,7 @@ class BootcConfirm(Adw.Bin):
         primary = {"disk": [], "filesystem": [], "encryption": [],
                    "hostname": [], "image": []}
         erase_disk = None
+        keep_files = False
 
         for final in finals:
             for key, value in final.items():
@@ -158,6 +159,7 @@ class BootcConfirm(Adw.Bin):
                     if "auto" in value:
                         auto = value["auto"]
                         erase_disk = auto.get("disk", "")
+                        keep_files = bool(auto.get("keep_files"))
                         primary["disk"].append(
                             BootcChoiceEntry(
                                 _("Target disk"),
@@ -287,7 +289,10 @@ class BootcConfirm(Adw.Bin):
         # file. Unlike other copy keys an empty line does not hide it: a
         # whole-disk erase is always announced.
         warning = ""
-        if erase_disk:
+        if erase_disk and keep_files:
+            warning = _("Everything on {disk} except the files in /home is replaced. "
+                        "This cannot be undone.").format(disk=erase_disk)
+        elif erase_disk:
             warning = (
                 copy_text.text(self.__window, "confirm_warning", disk=erase_disk)
                 or _("All data on this disk will be erased. This cannot be undone."))

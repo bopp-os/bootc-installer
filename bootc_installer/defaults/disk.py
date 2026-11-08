@@ -37,6 +37,7 @@ from bootc_installer.core.disks import DisksManager, Diskutils, Partition
 from bootc_installer.core.system import Systeminfo
 from bootc_installer.utils.field_check import FieldCheck
 from bootc_installer.defaults.disk_plan import (
+    apply_keep_files,
     build_auto_partition_recipe,
     build_disk_finals,
 )
@@ -633,7 +634,10 @@ class BootcDefaultDiskConfirmModal(Adw.Window):
             entry = Adw.ActionRow()
             if partition == "auto":
                 entry.set_title(partition_recipe[partition]["disk"])
-                entry.set_subtitle(_("Entire disk will be used."))
+                if partition_recipe[partition].get("keep_files"):
+                    entry.set_subtitle(_("The files in /home are kept; the rest of the old system is replaced."))
+                else:
+                    entry.set_subtitle(_("Entire disk will be used."))
             else:
                 if partition == "disk":
                     continue
@@ -712,6 +716,9 @@ class BootcDefaultDisk(Adw.Bin):
     battery_banner = Gtk.Template.Child()
     var_disk_keep_row = Gtk.Template.Child()
     var_disk_keep_switch = Gtk.Template.Child()
+    group_keep_files = Gtk.Template.Child()
+    keep_files_switch = Gtk.Template.Child()
+    keep_files_pass_entry = Gtk.Template.Child()
 
     _VIRTUAL_DISK_SIZE = "50G"
 
@@ -785,6 +792,8 @@ class BootcDefaultDisk(Adw.Bin):
         self.btn_auto.connect("clicked", self.__on_auto_clicked)
         self.btn_exit.connect("clicked", self.__on_btn_exit_clicked)
         self.var_disk_switch.connect("notify::active", self.__on_var_disk_switch_toggled)
+        self.keep_files_switch.connect("notify::active", self.__on_keep_files_toggled)
+        self.keep_files_pass_entry.connect("changed", lambda *_a: self.__on_keep_files_changed())
 
         # Populate filesystem picker and hostname from the selected image's metadata.
         # We do the initial setup now, but also refresh when this page becomes active
@@ -941,7 +950,7 @@ class BootcDefaultDisk(Adw.Bin):
         """Enable Next only when a partition recipe exists, the fs tool is
         present and fisherman knows no problem with the hostname."""
         ok = (self.__partition_recipe is not None and self.__fs_tool_ok
-              and self.hostname_check.ok)
+              and self.hostname_check.ok and self.__keep_files_ready())
         self.btn_next.set_visible(ok)
         self.btn_next.set_sensitive(ok)
 
@@ -987,6 +996,7 @@ class BootcDefaultDisk(Adw.Bin):
                 self.__update_action_buttons()
 
         self._set_auto_partition_recipe(disk)
+        self.__update_keep_files_group()
         logger.info("Auto-selected only installable disk: %s", disk.disk)
         return True
 
@@ -1006,6 +1016,7 @@ class BootcDefaultDisk(Adw.Bin):
         self.btn_auto.set_sensitive(True)
         if self.__virtual_check is not None:
             self.__virtual_check.set_active(True)
+        self.__update_keep_files_group()
         logger.info("Virtual disk selected")
 
     def __build_virtual_disk_row(self):
@@ -1099,13 +1110,66 @@ class BootcDefaultDisk(Adw.Bin):
                 if self.group_var_disk_existing.get_visible()
                 else False,
             )
-        return build_disk_finals(
+        finals = build_disk_finals(
             self.__partition_recipe,
             fs,
             self.hostname_entry.get_text(),
             virtual_disk=virtual_disk,
             var_disk=var_disk,
         )
+        existing = self.__keep_files_install()
+        if existing is not None:
+            finals = apply_keep_files(finals, existing, self.keep_files_pass_entry.get_text())
+        return finals
+
+    # --- Keep my files (reinstall over an existing install) ---
+
+    def __keep_files_install(self):
+        """The existing install the user chose to keep files of, or None."""
+        if self.keep_files_switch is None or self.group_keep_files is None:
+            return None  # page built without the keep-files widgets (unit tests)
+        if self.keep_files_switch.get_active() is not True or not self.group_keep_files.get_visible():
+            return None
+        if self.__use_virtual_disk or len(self.__selected_disks) != 1:
+            return None
+        return self.__selected_disks[0].existing_install
+
+    def __keep_files_ready(self) -> bool:
+        existing = self.__keep_files_install()
+        if existing is None or not existing.get("encrypted"):
+            return True
+        return bool(self.keep_files_pass_entry.get_text())
+
+    def __update_keep_files_group(self):
+        if self.group_keep_files is None or self.keep_files_switch is None:
+            return  # page built without the keep-files widgets (unit tests)
+        existing = None
+        if not self.__use_virtual_disk and len(self.__selected_disks) == 1:
+            existing = self.__selected_disks[0].existing_install
+        self.group_keep_files.set_visible(existing is not None)
+        if existing is None:
+            self.keep_files_switch.set_active(False)
+        self.__on_keep_files_changed()
+
+    def __on_keep_files_toggled(self, switch, _param):
+        self.__on_keep_files_changed()
+
+    def __on_keep_files_changed(self):
+        existing = self.__keep_files_install()
+        keep = existing is not None
+        if self.keep_files_pass_entry is None:
+            return
+        self.keep_files_pass_entry.set_visible(keep and bool(existing.get("encrypted")))
+        self.btn_auto.set_label(_("Reinstall, Keep My Files") if keep else _("Use Entire Disk"))
+        # Neither applies when the old root is kept as it is.
+        self.filesystem_row.set_sensitive(not keep)
+        self.var_disk_switch.set_sensitive(not keep)
+        if keep:
+            self.var_disk_switch.set_active(False)
+        # The encryption step reads this to show "keeping the existing encryption".
+        self.__window.keep_files_mode = keep
+        self.__update_action_buttons()
+        self.__update_next_button()
 
     def __on_auto_clicked(self, button):
         if self.__use_virtual_disk:
@@ -1133,7 +1197,8 @@ class BootcDefaultDisk(Adw.Bin):
 
     def __update_action_buttons(self):
         self.btn_auto.set_sensitive(len(self.__selected_disks) == 1
-                                    and self.hostname_check.ok)
+                                    and self.hostname_check.ok
+                                    and self.__keep_files_ready())
 
     def on_disk_entry_toggled(self, widget, disk):
         self.__use_virtual_disk = False
@@ -1143,7 +1208,7 @@ class BootcDefaultDisk(Adw.Bin):
         else:
             self.__selected_disks.remove(disk)
             self.__selected_disks_sum -= disk.size
-        self.__update_action_buttons()
+        self.__update_keep_files_group()
         # Rebuild var disk picker to exclude newly selected system disk
         if self.var_disk_switch.get_active():
             self.__rebuild_var_disk_picker()
@@ -1211,5 +1276,8 @@ class BootcDefaultDisk(Adw.Bin):
         self.confirm_partition_changes()
 
     def confirm_partition_changes(self):
-        modal = BootcDefaultDiskConfirmModal(self.__window, self.__partition_recipe)
+        recipe = self.__partition_recipe
+        if self.__keep_files_install() is not None and recipe and "auto" in recipe:
+            recipe = {"auto": dict(recipe["auto"], keep_files=True)}
+        modal = BootcDefaultDiskConfirmModal(self.__window, recipe)
         modal.present()

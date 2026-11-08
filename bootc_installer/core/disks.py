@@ -89,6 +89,13 @@ class Disk:
         return self.__probed.get("model", "")
 
     @property
+    def existing_install(self) -> dict | None:
+        """The install fisherman found on this disk that a keepFiles install can reinstall over
+        ({"root", "encrypted", "efi"}), or None."""
+        found = self.__probed.get("existing_install")
+        return found if isinstance(found, dict) and found.get("root") else None
+
+    @property
     def transport_label(self) -> str:
         return self.__probed.get("transport_label", "")
 

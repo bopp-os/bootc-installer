@@ -28,6 +28,8 @@ class BootcDefaultEncryption(Adw.Bin):
     btn_next = Gtk.Template.Child()
     page_header = Gtk.Template.Child()
 
+    group_keep_encryption = Gtk.Template.Child()
+    group_encryption_choice = Gtk.Template.Child()
     encryption_row = Gtk.Template.Child()
     use_encryption_switch = Gtk.Template.Child()
     tpm2_row = Gtk.Template.Child()
@@ -60,6 +62,8 @@ class BootcDefaultEncryption(Adw.Bin):
             copy_text.encryption_text(window, "tpm2-luks-passphrase", "_description"))
 
         self.btn_next.connect("clicked", self.__window.next)
+        # The disk step may switch to "Keep my files" after this page was built: check on every page change.
+        self.__window.carousel.connect("page-changed", lambda *_a: self.__update_keep_mode())
         self.use_encryption_switch.connect(
             "state-set", self.__on_encryption_switch_set)
         self.tpm2_switch.connect("state-set", self.__on_tpm2_switch_set)
@@ -167,7 +171,24 @@ class BootcDefaultEncryption(Adw.Bin):
 
         self.__update_btn_next()
 
+    def __keep_files(self) -> bool:
+        try:
+            window = self.__window
+        except AttributeError:  # page built without a window (unit tests)
+            return False
+        return getattr(window, "keep_files_mode", False) is True
+
+    def __update_keep_mode(self):
+        keep = self.__keep_files()
+        self.group_keep_encryption.set_visible(keep)
+        self.group_encryption_choice.set_visible(not keep)
+        self.__update_btn_next()
+
     def __update_btn_next(self):
+        if self.__keep_files():
+            # Nothing to choose: the disk step has the existing password.
+            self.btn_next.set_sensitive(True)
+            return
         use_enc = self.use_encryption_switch.get_active()
         rule = not use_enc or self.password_filled
         self.btn_next.set_sensitive(rule)

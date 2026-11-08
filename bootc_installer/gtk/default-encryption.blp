@@ -40,7 +40,17 @@ template $BootcDefaultEncryption: Adw.Bin {
           }
         }
 
-        Adw.PreferencesGroup {
+        // Shown instead of the choices below when the disk step keeps an existing install's files.
+        Adw.PreferencesGroup group_keep_encryption {
+          visible: false;
+
+          Adw.ActionRow keep_encryption_row {
+            title: _("Keeping the existing encryption");
+            subtitle: _("The disk stays encrypted with its current password, and TPM2 unlock stays as it was.");
+          }
+        }
+
+        Adw.PreferencesGroup group_encryption_choice {
           // Subtitles are branding copy, set in encryption.py: this row is
           // the luks-passphrase choice, the TPM row tpm2-luks-passphrase.
           Adw.ActionRow encryption_row {

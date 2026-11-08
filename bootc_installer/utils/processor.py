@@ -132,6 +132,7 @@ class Processor:
         filesystem = "xfs"
         btrfs_subvolumes = False
         custom_mounts = []
+        keep_files = None  # {"encrypted", "passphrase"} for a keep-files reinstall
 
         is_manual = (
             isinstance(disk_info, dict)
@@ -154,6 +155,11 @@ class Processor:
         elif isinstance(disk_info, dict):
             if "auto" in disk_info:
                 disk_device = disk_info["auto"].get("disk", "")
+                if disk_info["auto"].get("keep_files"):
+                    keep_files = {
+                        "encrypted": bool(disk_info["auto"].get("keep_files_encrypted")),
+                        "passphrase": disk_info["auto"].get("keep_files_passphrase", "") or "",
+                    }
             elif "disk" in disk_info:
                 disk_device = disk_info["disk"]
             elif "device" in disk_info:
@@ -187,6 +193,21 @@ class Processor:
                     encryption_passphrase = key
                 else:
                     encryption_type = "tpm2-luks"
+
+        # Keep my files: the existing container is unlocked with its current
+        # password and kept as it is (keyslots and TPM2 token included), so the
+        # encryption step's choice does not apply.
+        if keep_files is not None:
+            if keep_files["encrypted"]:
+                if not keep_files["passphrase"]:
+                    raise ValueError("Keeping files on an encrypted disk needs its current password")
+                encryption_type = "luks-passphrase"
+                encryption_passphrase = keep_files["passphrase"]
+            else:
+                encryption_type = "none"
+                encryption_passphrase = ""
+            btrfs_subvolumes = False
+            logger.info("Keep my files: reinstalling over the existing install on %s", disk_device)
 
         # --- Image / OCI ref ---
         # In Flatpak mode: finals contain "selected_image" or "custom_image" from the UI.
@@ -431,6 +452,9 @@ class Processor:
         }
         if custom_mounts:
             recipe["customMounts"] = custom_mounts
+        if keep_files is not None:
+            recipe["keepFiles"] = True
+            recipe["btrfsSubvolumes"] = False  # the old root is kept as it is
         if image_type and image_type != "bootc":
             recipe["imageType"] = image_type
         if flatpak_var_path:

@@ -40,3 +40,18 @@ def build_disk_finals(
             "keep_existing": var_disk[1],
         }
     return result
+
+
+def apply_keep_files(disk_finals: dict, existing_install: dict | None, passphrase: str) -> dict:
+    """Mark the disk step's auto layout as a keep-files reinstall over existing_install.
+
+    The Processor turns the marks into fisherman's keepFiles and the unlock passphrase; the
+    encryption step's own choice is then ignored (the container is kept as it is).
+    """
+    disk = disk_finals.get("disk") or {}
+    if "auto" not in disk or not existing_install:
+        return disk_finals
+    disk["auto"]["keep_files"] = True
+    disk["auto"]["keep_files_encrypted"] = bool(existing_install.get("encrypted"))
+    disk["auto"]["keep_files_passphrase"] = passphrase if existing_install.get("encrypted") else ""
+    return disk_finals
